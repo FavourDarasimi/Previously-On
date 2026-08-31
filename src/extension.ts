@@ -1,0 +1,145 @@
+import * as vscode from 'vscode';
+import { SessionStore, computeWorkspaceId } from './session/sessionStore';
+import { SessionTracker } from './session/sessionTracker';
+import { SummaryWebviewPanel } from './webview/summaryWebviewPanel';
+import { composeSummary, shouldShowRecap } from './summary/summaryComposer';
+import { registerCommands } from './commands';
+import { Strings } from './strings';
+
+let tracker: SessionTracker | undefined;
+let store: SessionStore | undefined;
+
+/**
+ * Activate is called on `onStartupFinished` per package.json.
+ * It must not do slow/blocking work before VS Code's own restore.
+ * We load snapshot, run decision tree, render if needed, start tracking.
+ */
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  store = new SessionStore(context);
+
+  // Register commands early so they are available even if recap is suppressed
+  // We will init tracker before registering to pass it in
+  tracker = new SessionTracker(store);
+
+  registerCommands(context, store, tracker);
+
+  // Load snapshot (async but fast — JSON file bounded by touched files)
+  let snapshot: Awaited<ReturnType<SessionStore['load']>>;
+  try {
+    snapshot = await store.load();
+  } catch (err) {
+    console.warn(`[Previously On] load snapshot failed: ${err}`);
+    snapshot = undefined;
+  }
+
+  // Read configuration
+  const config = vscode.workspace.getConfiguration('previouslyOn');
+  const enabled = config.get<boolean>('enabled', true);
+  const minIdleMinutes = config.get<number>('minIdleMinutes', 0);
+  const mutedForSession = store.getMutedForSession();
+
+  const now = new Date();
+
+  // Decision tree (pure)
+  const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now);
+
+  // If decision is to show, compose view-model and render
+  if (decision.shouldShow && snapshot) {
+    const viewModel = composeSummary(snapshot, { now });
+    if (viewModel && viewModel.hasContent) {
+      try {
+        SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel, store);
+      } catch (err) {
+        console.warn(`[Previously On] failed to show panel: ${err}`);
+      }
+    } else {
+      // No content to show — suppressed per FINAL_FLOW §4
+      console.log('[Previously On] suppressed — no content');
+    }
+  } else {
+    // Log reason for M1 observability (not user-visible)
+    if (decision.reason === 'first_run') {
+      // Optional subtle status bar hint for first run — non-blocking, dismissible
+      const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+      status.text = `$(info) ${Strings.firstRunStatus}`;
+      status.tooltip = 'Previously On will recap your session next time you reopen this workspace.';
+      status.command = 'previouslyOn.showRecap';
+      status.show();
+      context.subscriptions.push(status);
+      // Auto-hide after 10s
+      setTimeout(() => status.dispose(), 10_000);
+    }
+    console.log(`[Previously On] recap suppressed: ${decision.reason}`);
+  }
+
+  // Start tracking the new session regardless of whether recap was shown
+  // Push tracker disposables to context.subscriptions
+  try {
+    tracker.start(context.subscriptions);
+    context.subscriptions.push(tracker);
+  } catch (err) {
+    console.warn(`[Previously On] failed to start tracker: ${err}`);
+  }
+
+  // Also track workspaceId for completeness (not strictly needed for M1 but persists)
+  // Ensure storageUri exists for future saves
+  try {
+    if (context.storageUri) {
+      await vscode.workspace.fs.createDirectory(context.storageUri);
+    }
+    // Ensure snapshot has workspaceId if missing — will be set on next flush
+    void computeWorkspaceId();
+  } catch {
+    // ignore
+  }
+}
+
+export function deactivate(): void {
+  // Synchronous flush — VS Code allows a short sync window
+  try {
+    if (tracker) {
+      tracker.flushSync();
+    } else if (store) {
+      // Fallback if tracker not initialized
+      const fallbackSnapshot = {
+        schemaVersion: 1 as const,
+        workspaceId: computeWorkspaceId(),
+        sessionEndedAt: new Date().toISOString(),
+        touchedFiles: [],
+        todosFound: [],
+      };
+      store.saveSync(fallbackSnapshot);
+    }
+  } catch (err) {
+    console.warn(`[Previously On] deactivate flush failed: ${err}`);
+  }
+
+  // Clear muted flag for next session (so mute only lasts one session)
+  // This handles the "mute for this session" semantics for M1.
+  // Note: This means Reload Window will also clear mute — a known M1 limitation
+  // to be refined in M3 with session-boundary detection.
+  try {
+    if (store) {
+      store.setMutedForSessionSync(false);
+    }
+  } catch {
+    // ignore
+  }
+
+  // Dispose tracker
+  try {
+    tracker?.dispose();
+  } catch {
+    // ignore
+  }
+  tracker = undefined;
+  store = undefined;
+}
+
+// Exported for testing
+export function getTrackerForTesting(): SessionTracker | undefined {
+  return tracker;
+}
+export function getStoreForTesting(): SessionStore | undefined {
+  return store;
+}

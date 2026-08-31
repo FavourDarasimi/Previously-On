@@ -1,0 +1,7 @@
+/* Previously On - Webview styles
+   Theme-aware via VSCode CSS variables. For inline styles in panel, see summaryWebviewPanel.ts */
+body {
+  font-family: var(--vscode-font-family);
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+}

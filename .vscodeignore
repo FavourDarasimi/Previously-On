@@ -1,0 +1,17 @@
+.vscode/**
+.vscode-test/**
+src/**
+test/**
+.eslintrc.json
+.prettierrc
+.prettierignore
+tsconfig.json
+esbuild.js
+webpack.config.js
+*.map
+.gitignore
+AGENTS.md
+ARCHITECTURE.md
+FINAL_FLOW.md
+PRD.md
+WORKFLOW_RULES.md

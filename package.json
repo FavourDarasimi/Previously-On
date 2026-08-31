@@ -1,0 +1,76 @@
+{
+  "name": "previously-on",
+  "displayName": "Previously On",
+  "description": "Recap your last coding session on startup — files touched, uncommitted changes, and TODOs left behind.",
+  "version": "0.1.0",
+  "publisher": "previously-on",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "previouslyOn.showRecap",
+        "title": "Show Last Session Recap",
+        "category": "Previously On"
+      },
+      {
+        "command": "previouslyOn.muteForSession",
+        "title": "Mute Recap for This Session",
+        "category": "Previously On"
+      },
+      {
+        "command": "previouslyOn.dismissRecap",
+        "title": "Dismiss Recap",
+        "category": "Previously On"
+      }
+    ],
+    "configuration": {
+      "title": "Previously On",
+      "properties": {
+        "previouslyOn.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the Previously On session recap on startup."
+        },
+        "previouslyOn.minIdleMinutes": {
+          "type": "number",
+          "default": 0,
+          "minimum": 0,
+          "description": "Minimum idle time in minutes since the last session ended before showing the recap. 0 means show on every reopen."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "lint": "eslint src --ext ts",
+    "format": "prettier --write \"src/**/*.{ts,js,json}\" \"test/**/*.{ts,js,json}\"",
+    "test-compile": "tsc -p ./",
+    "test": "npm run test-compile && node ./out/test/runTest.js",
+    "vscode:prepublish": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.11.0",
+    "@types/sinon": "^17.0.3",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^6.19.0",
+    "@typescript-eslint/parser": "^6.19.0",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.19.11",
+    "eslint": "^8.57.0",
+    "mocha": "^10.3.0",
+    "prettier": "^3.2.5",
+    "sinon": "^17.0.1",
+    "typescript": "^5.4.5"
+  }
+}

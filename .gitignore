@@ -1,0 +1,10 @@
+out
+dist
+node_modules
+.vscode-test
+*.vsix
+AGENTS.md
+ARCHITECTURE.md
+FINAL_FLOW.md
+PRD.md
+WORKFLOW_RULES.md
