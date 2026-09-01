@@ -48,6 +48,31 @@ describe('GitStatusProvider', () => {
     assert.strictEqual(result.changes.find((change) => change.path === '/workspace/src/c.ts')?.status, 'added');
   });
 
+  it('activates the vscode.git extension before reading status', async () => {
+    const repo = {
+      state: {
+        workingTreeChanges: [{ uri: vscode.Uri.file('/workspace/src/dirty.ts'), status: 'MODIFY' }],
+        indexChanges: [],
+      },
+    };
+
+    const activateStub = sandbox.stub().resolves();
+    sandbox.stub(vscode.extensions, 'getExtension').withArgs('vscode.git').returns({
+      isActive: false,
+      activate: activateStub,
+      exports: {
+        getAPI: () => ({ repositories: [repo] }),
+      },
+    } as unknown as vscode.Extension<unknown>);
+
+    const result = await new GitStatusProvider().getStatus();
+
+    assert.strictEqual(activateStub.calledOnce, true);
+    assert.strictEqual(result.hasRepository, true);
+    assert.strictEqual(result.changes.length, 1);
+    assert.strictEqual(result.changes[0].path, '/workspace/src/dirty.ts');
+  });
+
   it('returns empty output when vscode.git is unavailable or disabled', async () => {
     sandbox.stub(vscode.extensions, 'getExtension').withArgs('vscode.git').returns(undefined);
 
