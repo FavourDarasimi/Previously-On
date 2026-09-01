@@ -73,6 +73,32 @@ describe('GitStatusProvider', () => {
     assert.strictEqual(result.changes[0].path, '/workspace/src/dirty.ts');
   });
 
+  it('handles numeric Status enum values and resourceUri', async () => {
+    const repo = {
+      state: {
+        workingTreeChanges: [
+          { resourceUri: vscode.Uri.file('/workspace/src/num.ts'), status: 5 },
+          { resourceUri: vscode.Uri.file('/workspace/src/untracked.ts'), status: 7 },
+        ],
+        indexChanges: [{ resourceUri: vscode.Uri.file('/workspace/src/added.ts'), status: 1 }],
+      },
+    };
+
+    sandbox.stub(vscode.extensions, 'getExtension').withArgs('vscode.git').returns({
+      isActive: true,
+      exports: {
+        getAPI: () => ({ repositories: [repo] }),
+      },
+    } as unknown as vscode.Extension<unknown>);
+
+    const result = await new GitStatusProvider().getStatus();
+
+    assert.strictEqual(result.changes.length, 3);
+    assert.strictEqual(result.changes.find((c) => c.path === '/workspace/src/num.ts')?.status, 'modified');
+    assert.strictEqual(result.changes.find((c) => c.path === '/workspace/src/untracked.ts')?.status, 'untracked');
+    assert.strictEqual(result.changes.find((c) => c.path === '/workspace/src/added.ts')?.status, 'added');
+  });
+
   it('returns empty output when vscode.git is unavailable or disabled', async () => {
     sandbox.stub(vscode.extensions, 'getExtension').withArgs('vscode.git').returns(undefined);
 

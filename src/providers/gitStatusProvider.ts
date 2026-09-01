@@ -39,7 +39,11 @@ export class GitStatusProvider {
           continue;
         }
 
-        const fileChanges = [...(state.workingTreeChanges ?? []), ...(state.indexChanges ?? [])];
+        const fileChanges = [
+          ...(state.workingTreeChanges ?? []),
+          ...(state.indexChanges ?? []),
+          ...((state as unknown as { mergeChanges?: unknown[] }).mergeChanges ?? []),
+        ];
         for (const change of fileChanges) {
           const path = this.getChangePath(change);
           if (!path || seen.has(path)) {
@@ -70,19 +74,25 @@ export class GitStatusProvider {
       return undefined;
     }
 
-    const candidate = (change as { uri?: vscode.Uri; path?: string; fsPath?: string }).uri;
-    if (candidate && 'fsPath' in candidate) {
-      return candidate.fsPath;
+    const c = change as {
+      uri?: vscode.Uri;
+      resourceUri?: vscode.Uri;
+      originalUri?: vscode.Uri;
+      path?: string;
+      fsPath?: string;
+    };
+
+    const candidate = c.resourceUri ?? c.uri;
+    if (candidate && typeof candidate === 'object' && 'fsPath' in candidate) {
+      return (candidate as vscode.Uri).fsPath;
     }
 
-    const pathValue = (change as { path?: string; fsPath?: string }).path;
-    if (pathValue) {
-      return pathValue;
+    if (c.path) {
+      return c.path;
     }
 
-    const fsPathValue = (change as { fsPath?: string }).fsPath;
-    if (fsPathValue) {
-      return fsPathValue;
+    if (c.fsPath) {
+      return c.fsPath;
     }
 
     return undefined;
@@ -93,30 +103,79 @@ export class GitStatusProvider {
       return undefined;
     }
 
-    const status = (change as { status?: number | string }).status;
-    switch (status) {
-      case 'ADD':
-      case 'added':
-      case 1:
-        return 'added';
-      case 'MODIFY':
-      case 'modified':
-      case 2:
-        return 'modified';
-      case 'DELETE':
-      case 'deleted':
-      case 3:
-        return 'deleted';
-      case 'RENAME':
-      case 'renamed':
-      case 4:
-        return 'renamed';
-      case 'UNTRACKED':
-      case 'untracked':
-      case 5:
-        return 'untracked';
-      default:
-        return undefined;
+    const raw = change as { status?: number | string; statusString?: string };
+    const status: unknown = raw.status ?? raw.statusString;
+
+    if (typeof status === 'string') {
+      const s = status.toUpperCase();
+      switch (s) {
+        case 'INDEX_MODIFIED':
+        case 'MODIFIED':
+        case 'MODIFY':
+        case 'M':
+          return 'modified';
+        case 'INDEX_ADDED':
+        case 'ADDED':
+        case 'ADD':
+        case 'A':
+          return 'added';
+        case 'INDEX_DELETED':
+        case 'DELETED':
+        case 'DELETE':
+        case 'D':
+          return 'deleted';
+        case 'INDEX_RENAMED':
+        case 'RENAMED':
+        case 'RENAME':
+        case 'R':
+          return 'renamed';
+        case 'INDEX_COPIED':
+        case 'COPIED':
+          return 'added';
+        case 'UNTRACKED':
+        case '??':
+          return 'untracked';
+        case 'INTENT_TO_ADD':
+          return 'added';
+        case 'IGNORED':
+        case '!!':
+          return undefined;
+        default:
+          if (s === 'MODIFIED' || s.includes('MODIFIED')) return 'modified';
+          return undefined;
+      }
     }
+
+    if (typeof status === 'number') {
+      switch (status) {
+        case 0: // INDEX_MODIFIED
+        case 5: // MODIFIED
+        case 16: // BOTH_MODIFIED
+          return 'modified';
+        case 1: // INDEX_ADDED
+        case 4: // INDEX_COPIED
+        case 9: // INTENT_TO_ADD
+        case 10: // ADDED_BY_US
+        case 11: // ADDED_BY_THEM
+        case 14: // BOTH_ADDED
+          return 'added';
+        case 2: // INDEX_DELETED
+        case 6: // DELETED
+        case 12: // DELETED_BY_US
+        case 13: // DELETED_BY_THEM
+        case 15: // BOTH_DELETED
+          return 'deleted';
+        case 3: // INDEX_RENAMED
+          return 'renamed';
+        case 7: // UNTRACKED
+          return 'untracked';
+        case 8: // IGNORED
+          return undefined;
+        default:
+          return 'modified';
+      }
+    }
+
+    return undefined;
   }
 }
