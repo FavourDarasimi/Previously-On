@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import { SessionStore, SCHEMA_VERSION } from '../../src/session/sessionStore';
 import { composeSummary, shouldShowRecap } from '../../src/summary/summaryComposer';
 import { SummaryWebviewPanel } from '../../src/webview/summaryWebviewPanel';
+import { clearMuteIfLongGap } from '../../src/extension';
 
 function createMockMemento(): vscode.Memento & { _map: Map<string, unknown> } {
   const m = {
@@ -248,6 +249,19 @@ describe('Integration: activate -> load -> decision -> compose -> render', () =>
     const decision = shouldShowRecap(loaded, { enabled: true, minIdleMinutes: 0, mutedForSession: muted }, now);
     assert.strictEqual(decision.shouldShow, false);
     assert.strictEqual(decision.reason, 'muted');
+  });
+
+  it('activation: clears mute when long gap between activations', async () => {
+    // Seed muted=true and a lastActivation far in the past
+    await store.setMutedForSession(true);
+    const past = Date.now() - 10 * 60 * 1000; // 10 minutes ago
+    await context.globalState.update('previouslyOn.lastActivation', past);
+
+    // Call helper with threshold 5 minutes
+    await clearMuteIfLongGap(context, store, 5 * 60 * 1000);
+
+    const mutedAfter = store.getMutedForSession();
+    assert.strictEqual(mutedAfter, false, 'mute should be cleared after long gap');
   });
 
   it('full flow: suppresses when no content (empty files, no Git/TODO)', async () => {
