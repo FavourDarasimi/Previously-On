@@ -212,157 +212,277 @@ export class SummaryWebviewPanel {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${this._panel.webview.cspSource}; script-src 'nonce-${nonce}';">
   <title>${escapeHtml(viewModel.title)}</title>
   <style>
+    :root {
+      color-scheme: light dark;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       font-family: var(--vscode-font-family, sans-serif);
       font-size: var(--vscode-font-size, 13px);
       color: var(--vscode-editor-foreground);
       background: var(--vscode-editor-background);
-      padding: 16px;
+      padding: 12px 16px 18px;
       margin: 0;
       line-height: 1.5;
     }
+
+    .panel {
+      max-width: 540px;
+    }
+
     .header {
       display: flex;
+      align-items: flex-start;
       justify-content: space-between;
-      align-items: center;
-      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-      padding-bottom: 12px;
-      margin-bottom: 16px;
+      gap: 10px;
+      padding-bottom: 10px;
+   }
+
+    .title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      min-width: 0;
     }
+
     .header h1 {
       font-size: 1.2em;
       font-weight: 600;
+      line-height: 1.25;
+      letter-spacing: -0.01em;
       margin: 0;
     }
+
     .subtitle {
-      color: var(--vscode-descriptionForeground);
-      font-size: 0.95em;
-      margin-bottom: 20px;
-    }
-    .section {
-      margin-bottom: 20px;
-      border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-      border-radius: 6px;
-      overflow: hidden;
-    }
-    .section-header {
-      font-weight: 600;
-      padding: 10px 12px;
-      background: var(--vscode-sideBarSectionHeader-background, var(--vscode-editor-background));
-      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-      display: flex;
-      justify-content: space-between;
+      display: inline-flex;
       align-items: center;
-    }
-    .section-header .count {
-      font-weight: 400;
+      width: fit-content;
+      max-width: 100%;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+      background: var(--vscode-editor-inactiveSelectionBackground, transparent);
       color: var(--vscode-descriptionForeground);
-      font-size: 0.9em;
+      font-size: 0.85em;
+      line-height: 1.3;
     }
+
+    .section {
+      padding-top: 12px;
+      margin-top: 12px;
+      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+    }
+
+    .section:first-of-type {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .section-label {
+      font-size: 0.78em;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .section-count {
+      color: var(--vscode-descriptionForeground);
+      font-size: 0.82em;
+    }
+
     .file-list {
       list-style: none;
       margin: 0;
       padding: 0;
     }
+
     .file-item, .todo-item, .git-item {
       display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: space-between;
       gap: 12px;
-      padding: 8px 12px;
+      padding: 6px 6px;
+      border-radius: 4px;
       cursor: pointer;
-      border-bottom: 1px solid var(--vscode-list-inactiveSelectionBackground, transparent);
+      outline: none;
     }
-    .file-item:last-child, .todo-item:last-child, .git-item:last-child {
-      border-bottom: none;
-    }
+
     .file-item:hover, .todo-item:hover, .git-item:hover {
       background: var(--vscode-list-hoverBackground);
     }
+
+    .file-item:focus-visible, .todo-item:focus-visible, .git-item:focus-visible,
+    .btn:focus-visible, .close-button:focus-visible {
+      outline: 2px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+
     .file-item:active, .todo-item:active, .git-item:active {
       background: var(--vscode-list-activeSelectionBackground);
     }
+
     .file-path, .todo-path, .git-path {
       flex: 1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      min-width: 0;
     }
-    .file-path::before {
-      content: "📄 ";
+
+    .file-path {
+      color: var(--vscode-textLink-foreground);
     }
-    .file-hint {
+
+    .file-path.missing {
       color: var(--vscode-descriptionForeground);
-      font-size: 0.9em;
+    }
+
+    .file-hint,
+    .file-time,
+    .todo-meta,
+    .list-meta {
+      color: var(--vscode-descriptionForeground);
+     font-size: 0.82em;
       white-space: nowrap;
     }
+
     .git-status {
-      min-width: 28px;
-      text-align: center;
+      display: inline-block;
+      min-width: 2.25em;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: var(--vscode-badge-background, var(--vscode-editor-inactiveSelectionBackground));
+      color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
+      font-size: 0.78em;
       font-weight: 600;
+      text-align: center;
+    }
+
+    .git-path,
+    .todo-path {
       color: var(--vscode-editor-foreground);
     }
-    .todo-text {
-      color: var(--vscode-descriptionForeground);
+
+    .todo-item {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 4px;
+    }
+
+    .todo-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .todo-path {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: var(--vscode-textLink-foreground);
     }
-    .file-time, .todo-meta {
+
+    .todo-text {
       color: var(--vscode-descriptionForeground);
-      font-size: 0.9em;
-      white-space: nowrap;
+      line-height: 1.4;
     }
+
     .more-hint {
-      padding: 8px 12px;
+      padding-top: 6px;
       color: var(--vscode-descriptionForeground);
-      font-style: italic;
-      font-size: 0.9em;
+      font-size: 0.82em;
     }
-    .section-actions {
-      padding: 12px;
-      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-    }
+
     .actions {
       display: flex;
       justify-content: flex-start;
       gap: 10px;
-      margin-top: 16px;
-      padding-top: 16px;
+      margin-top: 14px;
+      padding-top: 14px;
       border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
     }
-    .btn {
-      padding: 6px 14px;
-      border-radius: 2px;
-      border: none;
-      cursor: pointer;
-      font-size: 13px;
-      font-family: inherit;
+
+    .btn,
+    .close-button {
+      font: inherit;
     }
-    .btn-secondary {
+
+    .btn {
+      appearance: none;
+      border: 1px solid var(--vscode-button-border, transparent);
+      border-radius: 2px;
       background: var(--vscode-button-secondaryBackground, var(--vscode-list-hoverBackground));
       color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
-      border: 1px solid var(--vscode-button-border, transparent);
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.1s ease;
     }
-    .btn-secondary:hover {
+
+    .btn:hover,
+    .close-button:hover {
       background: var(--vscode-list-hoverBackground);
+    }
+
+    .close-button {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      padding: 0;
+    }
+
+    .section-actions {
+      margin-top: 8px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <h1>${escapeHtml(viewModel.title)}</h1>
-    <span aria-label="close" title="Close" style="cursor:pointer; padding: 4px 8px;" onclick="dismiss()">×</span>
+  <div class="panel">
+    <div class="header">
+      <div class="title-block">
+        <h1>${escapeHtml(viewModel.title)}</h1>
+        <div class="subtitle">${escapeHtml(viewModel.subtitle)}</div>
+      </div>
+      <button type="button" class="close-button" aria-label="Close recap" title="Close" onclick="dismiss()">×</button>
+    </div>
+ 
+    ${filesHtml}
+    ${gitHtml}
+    ${todoHtml}
+ 
+    ${footerHtml}
   </div>
-  <div class="subtitle">${escapeHtml(viewModel.subtitle)}</div>
-
-  ${filesHtml}
-  ${gitHtml}
-  ${todoHtml}
-
-  ${footerHtml}
-
+ 
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     function openFile(filePath) {
@@ -380,18 +500,32 @@ export class SummaryWebviewPanel {
     function mute() {
       vscode.postMessage({ command: 'mute' });
     }
+    function handleKeyActivation(event, onActivate) {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        onActivate();
+      }
+    }
     document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.file-item[data-path]').forEach(el => {
         el.addEventListener('click', () => {
           const p = el.getAttribute('data-path');
           if (p) openFile(p);
         });
+        el.addEventListener('keydown', (event) => handleKeyActivation(event, () => {
+          const p = el.getAttribute('data-path');
+          if (p) openFile(p);
+        }));
       });
       document.querySelectorAll('.git-item[data-path]').forEach(el => {
         el.addEventListener('click', () => {
           const p = el.getAttribute('data-path');
           if (p) openFile(p);
         });
+        el.addEventListener('keydown', (event) => handleKeyActivation(event, () => {
+          const p = el.getAttribute('data-path');
+          if (p) openFile(p);
+        }));
       });
       document.querySelectorAll('.todo-item[data-path]').forEach(el => {
         el.addEventListener('click', () => {
@@ -399,6 +533,11 @@ export class SummaryWebviewPanel {
           const line = el.getAttribute('data-line');
           if (p && line) openTodo(p, line);
         });
+        el.addEventListener('keydown', (event) => handleKeyActivation(event, () => {
+          const p = el.getAttribute('data-path');
+          const line = el.getAttribute('data-line');
+          if (p && line) openTodo(p, line);
+        }));
       });
       const scmBtn = document.getElementById('btn-open-scm');
       if (scmBtn) scmBtn.addEventListener('click', openSCM);
@@ -421,8 +560,9 @@ export class SummaryWebviewPanel {
       .map((f) => {
         const missing = !this.pathExists(f.path);
         const hint = missing ? ` <span class="file-hint">(${escapeHtml(Strings.filesTouched.noLongerExists)})</span>` : '';
-        return `<li class="file-item" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
-            <span class="file-path">${escapeHtml(f.path)}${hint}</span>
+        const className = missing ? 'file-path missing' : 'file-path';
+        return `<li class="file-item" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(f.path)}">
+            <span class="${className}">${escapeHtml(f.path)}${hint}</span>
             <span class="file-time">${escapeHtml(f.relativeTime)}</span>
           </li>`;
       })
@@ -434,8 +574,8 @@ export class SummaryWebviewPanel {
 
     return `<div class="section" id="files-touched">
       <div class="section-header">
-        <span>📝 ${escapeHtml(Strings.filesTouched.title)}</span>
-        <span class="count">(${countLabel})</span>
+        <span class="section-label">${escapeHtml(Strings.filesTouched.title)}</span>
+        <span class="section-count">${countLabel}</span>
       </div>
       <ul class="file-list">
         ${items}
@@ -561,7 +701,7 @@ export class SummaryWebviewPanel {
     const items = viewModel.gitStatus.changes
       .map(
         (change) =>
-          `<li class="git-item" data-path="${escapeHtml(change.path)}" title="${escapeHtml(change.path)}">
+          `<li class="git-item" data-path="${escapeHtml(change.path)}" title="${escapeHtml(change.path)}" tabindex="0" role="button" aria-label="Open ${escapeHtml(change.path)}">
             <span class="git-status">${escapeHtml(change.label)}</span>
             <span class="git-path">${escapeHtml(change.path)}</span>
           </li>`
@@ -570,14 +710,14 @@ export class SummaryWebviewPanel {
 
     return `<div class="section" id="uncommitted-changes">
       <div class="section-header">
-        <span>🔧 ${escapeHtml(Strings.gitStatus.title)}</span>
-        <span class="count">(${viewModel.gitStatus.count})</span>
+        <span class="section-label">${escapeHtml(Strings.gitStatus.title)}</span>
+        <span class="section-count">${viewModel.gitStatus.count}</span>
       </div>
       <ul class="file-list">
         ${items}
       </ul>
       <div class="section-actions">
-        <button class="btn btn-secondary" id="btn-open-scm">${escapeHtml(Strings.actions.openSourceControl)}</button>
+        <button class="btn btn-secondary" id="btn-open-scm" type="button">${escapeHtml(Strings.actions.openSourceControl)}</button>
       </div>
     </div>`;
   }
@@ -590,8 +730,11 @@ export class SummaryWebviewPanel {
     const items = viewModel.todos
       .map(
         (todo) =>
-          `<li class="todo-item" data-path="${escapeHtml(todo.path)}" data-line="${todo.line}" title="${escapeHtml(todo.path)}:${todo.line}">
-            <span class="todo-path">${escapeHtml(todo.path)}:${todo.line}</span>
+          `<li class="todo-item" data-path="${escapeHtml(todo.path)}" data-line="${todo.line}" title="${escapeHtml(todo.path)}:${todo.line}" tabindex="0" role="button" aria-label="Open ${escapeHtml(todo.path)} at line ${todo.line}">
+            <div class="todo-row">
+              <span class="todo-path">${escapeHtml(todo.path)}:${todo.line}</span>
+              <span class="list-meta">line ${todo.line}</span>
+            </div>
             <span class="todo-text">${escapeHtml(todo.text)}</span>
           </li>`
       )
@@ -599,8 +742,8 @@ export class SummaryWebviewPanel {
 
     return `<div class="section" id="todos-left">
       <div class="section-header">
-        <span>📌 ${escapeHtml(Strings.todos.title)}</span>
-        <span class="count">(${viewModel.todos.length})</span>
+        <span class="section-label">${escapeHtml(Strings.todos.title)}</span>
+        <span class="section-count">${viewModel.todos.length}</span>
       </div>
       <ul class="file-list">
         ${items}
@@ -630,8 +773,8 @@ export class SummaryWebviewPanel {
 
   private renderFooter(): string {
     return `<div class="actions">
-      <button class="btn btn-secondary" id="btn-dismiss">${escapeHtml(Strings.actions.dismiss)}</button>
-      <button class="btn btn-secondary" id="btn-mute">${escapeHtml(Strings.actions.muteForSession)}</button>
+      <button class="btn btn-secondary" id="btn-dismiss" type="button">${escapeHtml(Strings.actions.dismiss)}</button>
+      <button class="btn btn-secondary" id="btn-mute" type="button">${escapeHtml(Strings.actions.muteForSession)}</button>
     </div>`;
   }
 }
