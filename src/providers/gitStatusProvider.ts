@@ -14,8 +14,12 @@ export class GitStatusProvider {
   async getStatus(): Promise<GitStatusResult> {
     try {
       const gitExtension = vscode.extensions.getExtension('vscode.git');
-      if (!gitExtension || !gitExtension.isActive) {
+      if (!gitExtension) {
         return { hasRepository: false, changes: [] };
+      }
+
+      if (!gitExtension.isActive) {
+        await gitExtension.activate();
       }
 
       const api = gitExtension.exports && typeof gitExtension.exports.getAPI === 'function'
