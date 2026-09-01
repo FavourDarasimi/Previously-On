@@ -189,10 +189,18 @@ export class SummaryWebviewPanel {
   }
 
   private getHtml(viewModel: SummaryViewModel): string {
-    const filesHtml = this.renderFilesTouched(viewModel);
-    const gitHtml = this.renderGitStatus(viewModel);
-    const todoHtml = this.renderTodos(viewModel);
     const footerHtml = this.renderFooter();
+
+    // Multi-root support: when workspace has multiple folders, group sections by folder
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    let groupedHtml = '';
+    if (folders.length > 1) {
+      groupedHtml = this.renderGroupedByFolder(viewModel, folders);
+    }
+
+    const filesHtml = groupedHtml || this.renderFilesTouched(viewModel);
+    const gitHtml = groupedHtml ? '' : this.renderGitStatus(viewModel);
+    const todoHtml = groupedHtml ? '' : this.renderTodos(viewModel);
 
     const nonce = getNonce();
 
@@ -434,6 +442,115 @@ export class SummaryWebviewPanel {
       </ul>
       ${moreHint}
     </div>`;
+  }
+
+  /**
+   * Group all three recap sections by workspace folder for multi-root workspaces.
+   */
+  private renderGroupedByFolder(viewModel: SummaryViewModel, folders: readonly vscode.WorkspaceFolder[]): string {
+    // Build mapping: folderName -> { files: [], git: [], todos: [] }
+    type Group = { files: NonNullable<SummaryViewModel['filesTouched']>; git: NonNullable<SummaryViewModel['gitStatus']> | undefined; todos: NonNullable<SummaryViewModel['todos']> };
+    const groups = new Map<string, Group>();
+
+    for (const f of folders) {
+      groups.set(f.name, { files: [], git: undefined, todos: [] });
+    }
+
+    // Helper to find folder for a path
+    const findFolderName = (p: string): string | undefined => {
+      if (path.isAbsolute(p)) {
+        for (const f of folders) {
+          const base = f.uri.fsPath;
+          if (p === base || p.startsWith(base + path.sep)) {
+            return f.name;
+          }
+        }
+      } else {
+        // Relative path: try resolving against each folder and test existence
+        for (const f of folders) {
+          const candidate = path.join(f.uri.fsPath, p);
+          try {
+            if (fs.existsSync(candidate)) {
+              return f.name;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      return undefined;
+    };
+
+    // Distribute files
+    for (const file of viewModel.filesTouched) {
+      const folderName = findFolderName(file.path);
+      if (folderName && groups.has(folderName)) {
+        groups.get(folderName)!.files.push(file);
+      }
+    }
+
+    // Distribute git changes
+    if (viewModel.gitStatus && viewModel.gitStatus.changes.length > 0) {
+      for (const change of viewModel.gitStatus.changes) {
+        const folderName = findFolderName(change.path);
+        if (folderName && groups.has(folderName)) {
+          const g = groups.get(folderName)!;
+          if (!g.git) {
+            g.git = { hasRepository: true, count: 0, changes: [] } as any;
+          }
+          (g.git as any).changes.push({ path: change.path, status: change.status, label: change.label });
+          (g.git as any).count = (g.git as any).changes.length;
+        }
+      }
+    }
+
+    // Distribute todos
+    if (viewModel.todos && viewModel.todos.length > 0) {
+      for (const todo of viewModel.todos) {
+        const folderName = findFolderName(todo.path);
+        if (folderName) {
+          const grp = groups.get(folderName);
+          if (grp) {
+            grp.todos.push(todo);
+          }
+        }
+      }
+    }
+
+    // Render group blocks; skip empty folders (collapsed by default)
+    let html = '';
+    for (const [name, g] of groups.entries()) {
+      const hasFiles = g.files && g.files.length > 0;
+      const hasGit = g.git && g.git.count > 0;
+      const hasTodos = g.todos && g.todos.length > 0;
+      if (!hasFiles && !hasGit && !hasTodos) {
+        // collapsed by default -> render a small header collapsed
+        html += `<div class="section"><div class="section-header"><span>${escapeHtml(name)}</span><span class="count">(empty)</span></div></div>`;
+        continue;
+      }
+
+      // Build a mini viewModel for folder and render its sections
+      const miniVm: SummaryViewModel = {
+        title: `${viewModel.title} — ${name}`,
+        subtitle: viewModel.subtitle,
+        filesTouched: g.files,
+        totalFiles: g.files.length,
+        truncated: false,
+        hasContent: hasFiles || hasGit || hasTodos,
+        sessionEndedAt: viewModel.sessionEndedAt,
+        gitStatus: g.git as any,
+        todos: g.todos,
+      } as SummaryViewModel;
+
+      html += `<div class="section" aria-label="folder-${escapeHtml(name)}">
+        <div class="section-header"><span>${escapeHtml(name)}</span><span class="count"></span></div>
+        ${this.renderFilesTouched(miniVm)}
+        ${this.renderGitStatus(miniVm)}
+        ${this.renderTodos(miniVm)}
+      </div>`;
+    }
+
+    return html;
   }
 
   private renderGitStatus(viewModel: SummaryViewModel): string {

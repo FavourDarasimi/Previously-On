@@ -1,5 +1,16 @@
 import * as vscode from 'vscode';
 import { SessionStore, computeWorkspaceId } from './session/sessionStore';
+
+// Exported helper: clears muted flag when last activation gap exceeds threshold
+export async function clearMuteIfLongGap(context: vscode.ExtensionContext, store: SessionStore, thresholdMs = 5 * 60 * 1000): Promise<void> {
+  const lastActivation = context.globalState.get<number>('previouslyOn.lastActivation');
+  const nowMs = Date.now();
+  if (lastActivation && nowMs - lastActivation > thresholdMs) {
+    await store.clearMutedForSession();
+  }
+  await context.globalState.update('previouslyOn.lastActivation', nowMs);
+}
+
 import { SessionTracker } from './session/sessionTracker';
 import { GitStatusProvider } from './providers/gitStatusProvider';
 import { TodoScanner } from './providers/todoScanner';
@@ -39,7 +50,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const enabled = config.get<boolean>('enabled', true);
   const minIdleMinutes = config.get<number>('minIdleMinutes', 0);
   const todoTags = config.get<string>('todoTags', 'TODO|FIXME|HACK');
+  // Determine whether muted should be cleared due to a long gap between activations.
+  // Use a persisted last-activation timestamp in globalState to distinguish Reload Window
+  // (short gap) from a real close+reopen (long gap). Threshold chosen: 5 minutes.
   const mutedForSession = store.getMutedForSession();
+  void clearMuteIfLongGap(context, store, 5 * 60 * 1000).catch((err) => {
+    console.warn(`[Previously On] activation: failed to evaluate session boundary: ${err}`);
+  });
+
 
   const now = new Date();
   const gitStatusProvider = new GitStatusProvider();
@@ -121,17 +139,10 @@ export function deactivate(): void {
     console.warn(`[Previously On] deactivate flush failed: ${err}`);
   }
 
-  // Clear muted flag for next session (so mute only lasts one session)
-  // This handles the "mute for this session" semantics for M1.
-  // Note: This means Reload Window will also clear mute — a known M1 limitation
-  // to be refined in M3 with session-boundary detection.
-  try {
-    if (store) {
-      store.setMutedForSessionSync(false);
-    }
-  } catch {
-    // ignore
-  }
+  // Previously the muted flag was cleared unconditionally on deactivate which
+  // caused Reload Window to also clear the mute. M3 refines this behavior: the
+  // mute is now cleared on activation when a long gap (see activate) is detected.
+  // Avoid clearing here to preserve mute across Reload Window.
 
   // Dispose tracker
   try {
