@@ -45,6 +45,11 @@
           "default": 0,
           "minimum": 0,
           "description": "Minimum idle time in minutes since the last session ended before showing the recap. 0 means show on every reopen."
+        },
+        "previouslyOn.todoTags": {
+          "type": "string",
+          "default": "TODO|FIXME|HACK",
+          "description": "Pipe-delimited TODO tag pattern used when scanning the files touched in the last session."
         }
       }
     }

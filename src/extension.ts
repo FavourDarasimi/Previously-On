@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { SessionStore, computeWorkspaceId } from './session/sessionStore';
 import { SessionTracker } from './session/sessionTracker';
+import { GitStatusProvider } from './providers/gitStatusProvider';
+import { TodoScanner } from './providers/todoScanner';
 import { SummaryWebviewPanel } from './webview/summaryWebviewPanel';
 import { composeSummary, shouldShowRecap } from './summary/summaryComposer';
 import { registerCommands } from './commands';
@@ -36,16 +38,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const config = vscode.workspace.getConfiguration('previouslyOn');
   const enabled = config.get<boolean>('enabled', true);
   const minIdleMinutes = config.get<number>('minIdleMinutes', 0);
+  const todoTags = config.get<string>('todoTags', 'TODO|FIXME|HACK');
   const mutedForSession = store.getMutedForSession();
 
   const now = new Date();
+  const gitStatusProvider = new GitStatusProvider();
+  const todoScanner = new TodoScanner({ todoTags });
+  const gitStatus = snapshot ? await gitStatusProvider.getStatus() : undefined;
+  const todos = snapshot ? await todoScanner.scan(snapshot.touchedFiles.map((file) => file.path)) : [];
 
   // Decision tree (pure)
-  const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now);
+  const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now, gitStatus, todos);
 
   // If decision is to show, compose view-model and render
   if (decision.shouldShow && snapshot) {
-    const viewModel = composeSummary(snapshot, { now });
+    const viewModel = composeSummary(snapshot, gitStatus, todos, { now });
     if (viewModel && viewModel.hasContent) {
       try {
         SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel, store);

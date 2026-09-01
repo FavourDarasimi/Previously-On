@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { SummaryViewModel } from '../summary/viewModel';
 import { SessionStore } from '../session/sessionStore';
 import { Strings } from '../strings';
@@ -75,11 +76,16 @@ export class SummaryWebviewPanel {
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
     this._panel.webview.onDidReceiveMessage(
-      async (msg: { command: string; path?: string }) => {
+      async (msg: { command: string; path?: string; line?: number }) => {
         switch (msg.command) {
           case 'openFile':
             if (msg.path) {
               await this.handleOpenFile(msg.path);
+            }
+            break;
+          case 'openTodo':
+            if (msg.path) {
+              await this.handleOpenFile(msg.path, msg.line);
             }
             break;
           case 'dismiss':
@@ -131,7 +137,7 @@ export class SummaryWebviewPanel {
     }
   }
 
-  private async handleOpenFile(requestedPath: string): Promise<void> {
+  private async handleOpenFile(requestedPath: string, lineNumber?: number): Promise<void> {
     try {
       let uri: vscode.Uri;
       if (path.isAbsolute(requestedPath)) {
@@ -139,14 +145,11 @@ export class SummaryWebviewPanel {
       } else {
         const folders = vscode.workspace.workspaceFolders;
         if (folders && folders.length > 0) {
-          // Try to resolve relative to first folder, or find matching folder
           const candidate = vscode.Uri.joinPath(folders[0].uri, requestedPath);
-          // Check if file exists via fs stat; if not, fallback to search
           try {
             await vscode.workspace.fs.stat(candidate);
             uri = candidate;
           } catch {
-            // Try absolute fallback scanning all folders
             let found: vscode.Uri | undefined;
             for (const folder of folders) {
               const p = vscode.Uri.joinPath(folder.uri, requestedPath);
@@ -168,13 +171,17 @@ export class SummaryWebviewPanel {
       try {
         await vscode.workspace.fs.stat(uri);
       } catch {
-        // File no longer exists - still try to open, VS Code will show error
         void vscode.window.showInformationMessage(`${Strings.filesTouched.noLongerExists}: ${requestedPath}`);
         return;
       }
 
       const doc = await vscode.workspace.openTextDocument(uri);
-      await vscode.window.showTextDocument(doc, { preview: false });
+      const options: vscode.TextDocumentShowOptions = { preview: false };
+      if (typeof lineNumber === 'number' && Number.isFinite(lineNumber) && lineNumber > 0) {
+        const start = new vscode.Position(Math.max(0, lineNumber - 1), 0);
+        options.selection = new vscode.Selection(start, start);
+      }
+      await vscode.window.showTextDocument(doc, options);
     } catch (err) {
       console.warn(`[Previously On] Failed to open file ${requestedPath}: ${err}`);
       void vscode.window.showErrorMessage(`Could not open file: ${requestedPath}`);
@@ -183,9 +190,10 @@ export class SummaryWebviewPanel {
 
   private getHtml(viewModel: SummaryViewModel): string {
     const filesHtml = this.renderFilesTouched(viewModel);
+    const gitHtml = this.renderGitStatus(viewModel);
+    const todoHtml = this.renderTodos(viewModel);
     const footerHtml = this.renderFooter();
 
-    // Nonce for CSP if needed (not strictly required for inline scripts when enableScripts true but good practice)
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
@@ -248,34 +256,52 @@ export class SummaryWebviewPanel {
       margin: 0;
       padding: 0;
     }
-    .file-item {
+    .file-item, .todo-item, .git-item {
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 12px;
       padding: 8px 12px;
       cursor: pointer;
       border-bottom: 1px solid var(--vscode-list-inactiveSelectionBackground, transparent);
     }
-    .file-item:last-child {
+    .file-item:last-child, .todo-item:last-child, .git-item:last-child {
       border-bottom: none;
     }
-    .file-item:hover {
+    .file-item:hover, .todo-item:hover, .git-item:hover {
       background: var(--vscode-list-hoverBackground);
     }
-    .file-item:active {
+    .file-item:active, .todo-item:active, .git-item:active {
       background: var(--vscode-list-activeSelectionBackground);
     }
-    .file-path {
+    .file-path, .todo-path, .git-path {
       flex: 1;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      margin-right: 12px;
+      min-width: 0;
     }
     .file-path::before {
       content: "📄 ";
     }
-    .file-time {
+    .file-hint {
+      color: var(--vscode-descriptionForeground);
+      font-size: 0.9em;
+      white-space: nowrap;
+    }
+    .git-status {
+      min-width: 28px;
+      text-align: center;
+      font-weight: 600;
+      color: var(--vscode-editor-foreground);
+    }
+    .todo-text {
+      color: var(--vscode-descriptionForeground);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .file-time, .todo-meta {
       color: var(--vscode-descriptionForeground);
       font-size: 0.9em;
       white-space: nowrap;
@@ -285,6 +311,10 @@ export class SummaryWebviewPanel {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
       font-size: 0.9em;
+    }
+    .section-actions {
+      padding: 12px;
+      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
     }
     .actions {
       display: flex;
@@ -302,13 +332,6 @@ export class SummaryWebviewPanel {
       font-size: 13px;
       font-family: inherit;
     }
-    .btn-primary {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
-    }
-    .btn-primary:hover {
-      background: var(--vscode-button-hoverBackground);
-    }
     .btn-secondary {
       background: var(--vscode-button-secondaryBackground, var(--vscode-list-hoverBackground));
       color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
@@ -316,11 +339,6 @@ export class SummaryWebviewPanel {
     }
     .btn-secondary:hover {
       background: var(--vscode-list-hoverBackground);
-    }
-    .empty {
-      padding: 12px;
-      color: var(--vscode-descriptionForeground);
-      font-style: italic;
     }
   </style>
 </head>
@@ -332,6 +350,8 @@ export class SummaryWebviewPanel {
   <div class="subtitle">${escapeHtml(viewModel.subtitle)}</div>
 
   ${filesHtml}
+  ${gitHtml}
+  ${todoHtml}
 
   ${footerHtml}
 
@@ -340,13 +360,18 @@ export class SummaryWebviewPanel {
     function openFile(filePath) {
       vscode.postMessage({ command: 'openFile', path: filePath });
     }
+    function openTodo(filePath, line) {
+      vscode.postMessage({ command: 'openTodo', path: filePath, line: Number(line) });
+    }
+    function openSCM() {
+      vscode.postMessage({ command: 'openSCM' });
+    }
     function dismiss() {
       vscode.postMessage({ command: 'dismiss' });
     }
     function mute() {
       vscode.postMessage({ command: 'mute' });
     }
-    // Attach click handlers after DOM ready
     document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.file-item[data-path]').forEach(el => {
         el.addEventListener('click', () => {
@@ -354,6 +379,21 @@ export class SummaryWebviewPanel {
           if (p) openFile(p);
         });
       });
+      document.querySelectorAll('.git-item[data-path]').forEach(el => {
+        el.addEventListener('click', () => {
+          const p = el.getAttribute('data-path');
+          if (p) openFile(p);
+        });
+      });
+      document.querySelectorAll('.todo-item[data-path]').forEach(el => {
+        el.addEventListener('click', () => {
+          const p = el.getAttribute('data-path');
+          const line = el.getAttribute('data-line');
+          if (p && line) openTodo(p, line);
+        });
+      });
+      const scmBtn = document.getElementById('btn-open-scm');
+      if (scmBtn) scmBtn.addEventListener('click', openSCM);
       const dismissBtn = document.getElementById('btn-dismiss');
       if (dismissBtn) dismissBtn.addEventListener('click', dismiss);
       const muteBtn = document.getElementById('btn-mute');
@@ -366,18 +406,18 @@ export class SummaryWebviewPanel {
 
   private renderFilesTouched(viewModel: SummaryViewModel): string {
     if (!viewModel.filesTouched || viewModel.filesTouched.length === 0) {
-      // M1: omit section entirely if empty (per FINAL_FLOW §5: Any section with zero items is omitted)
       return '';
     }
     const countLabel = `${viewModel.totalFiles}`;
     const items = viewModel.filesTouched
-      .map(
-        (f) =>
-          `<li class="file-item" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
-            <span class="file-path">${escapeHtml(f.path)}</span>
+      .map((f) => {
+        const missing = !this.pathExists(f.path);
+        const hint = missing ? ` <span class="file-hint">(${escapeHtml(Strings.filesTouched.noLongerExists)})</span>` : '';
+        return `<li class="file-item" data-path="${escapeHtml(f.path)}" title="${escapeHtml(f.path)}">
+            <span class="file-path">${escapeHtml(f.path)}${hint}</span>
             <span class="file-time">${escapeHtml(f.relativeTime)}</span>
-          </li>`
-      )
+          </li>`;
+      })
       .join('');
 
     const moreHint = viewModel.truncated
@@ -394,6 +434,81 @@ export class SummaryWebviewPanel {
       </ul>
       ${moreHint}
     </div>`;
+  }
+
+  private renderGitStatus(viewModel: SummaryViewModel): string {
+    if (!viewModel.gitStatus || viewModel.gitStatus.changes.length === 0) {
+      return '';
+    }
+
+    const items = viewModel.gitStatus.changes
+      .map(
+        (change) =>
+          `<li class="git-item" data-path="${escapeHtml(change.path)}" title="${escapeHtml(change.path)}">
+            <span class="git-status">${escapeHtml(change.label)}</span>
+            <span class="git-path">${escapeHtml(change.path)}</span>
+          </li>`
+      )
+      .join('');
+
+    return `<div class="section" id="uncommitted-changes">
+      <div class="section-header">
+        <span>🔧 ${escapeHtml(Strings.gitStatus.title)}</span>
+        <span class="count">(${viewModel.gitStatus.count})</span>
+      </div>
+      <ul class="file-list">
+        ${items}
+      </ul>
+      <div class="section-actions">
+        <button class="btn btn-secondary" id="btn-open-scm">${escapeHtml(Strings.actions.openSourceControl)}</button>
+      </div>
+    </div>`;
+  }
+
+  private renderTodos(viewModel: SummaryViewModel): string {
+    if (!viewModel.todos || viewModel.todos.length === 0) {
+      return '';
+    }
+
+    const items = viewModel.todos
+      .map(
+        (todo) =>
+          `<li class="todo-item" data-path="${escapeHtml(todo.path)}" data-line="${todo.line}" title="${escapeHtml(todo.path)}:${todo.line}">
+            <span class="todo-path">${escapeHtml(todo.path)}:${todo.line}</span>
+            <span class="todo-text">${escapeHtml(todo.text)}</span>
+          </li>`
+      )
+      .join('');
+
+    return `<div class="section" id="todos-left">
+      <div class="section-header">
+        <span>📌 ${escapeHtml(Strings.todos.title)}</span>
+        <span class="count">(${viewModel.todos.length})</span>
+      </div>
+      <ul class="file-list">
+        ${items}
+      </ul>
+    </div>`;
+  }
+
+  private pathExists(filePath: string): boolean {
+    if (!filePath) {
+      return false;
+    }
+
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    if (path.isAbsolute(filePath)) {
+      return fs.existsSync(filePath);
+    }
+
+    for (const folder of folders) {
+      const candidate = vscode.Uri.joinPath(folder.uri, filePath).fsPath;
+      if (fs.existsSync(candidate)) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private renderFooter(): string {

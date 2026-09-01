@@ -132,6 +132,31 @@ describe('SummaryComposer', () => {
       assert.strictEqual(vm!.hasContent, false);
     });
 
+    it('merges git status and todo items into the view-model', () => {
+      const now = new Date('2026-08-29T18:00:00Z');
+      const snapshot = makeSnapshot({
+        sessionEndedAt: new Date('2026-08-29T17:00:00Z').toISOString(),
+      });
+      const gitStatus = {
+        hasRepository: true,
+        changes: [
+          { path: 'src/a.ts', status: 'modified' as const },
+          { path: 'src/b.ts', status: 'untracked' as const },
+        ],
+      };
+      const todos = [
+        { path: 'src/a.ts', line: 12, text: 'TODO: handle retry', tag: 'TODO' },
+        { path: 'src/b.ts', line: 4, text: 'FIXME: cleanup', tag: 'FIXME' },
+      ];
+
+      const vm = composeSummary(snapshot, gitStatus, todos, { now });
+      assert.ok(vm);
+      assert.strictEqual(vm!.gitStatus?.count, 2);
+      assert.strictEqual(vm!.gitStatus?.changes[0].path, 'src/a.ts');
+      assert.strictEqual(vm!.todos?.length, 2);
+      assert.strictEqual(vm!.hasContent, true);
+    });
+
     it('does not call any VSCode API (pure function verification)', () => {
       // This is verified by the fact that the function only uses snapshot + date math
       // and imports no vscode module. We assert that global vscode is not required.
