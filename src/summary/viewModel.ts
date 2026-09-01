@@ -1,9 +1,26 @@
+import { GitFileChange } from '../providers/gitStatusProvider';
+import { TodoItem } from '../providers/todoScanner';
+
 export interface FileTouchedViewModel {
   path: string;
   lastEventAt: string;
   relativeTime: string;
   eventType: string;
 }
+
+export interface GitStatusChangeViewModel {
+  path: string;
+  status: GitFileChange['status'];
+  label: string;
+}
+
+export interface GitStatusViewModel {
+  hasRepository: boolean;
+  count: number;
+  changes: GitStatusChangeViewModel[];
+}
+
+export interface TodoViewModel extends TodoItem {}
 
 export interface SummaryViewModel {
   title: string;
@@ -13,9 +30,8 @@ export interface SummaryViewModel {
   truncated: boolean;
   hasContent: boolean;
   sessionEndedAt: string;
-  // Future M2+ sections
-  // gitStatus?: GitStatusViewModel | null
-  // todos?: TodoViewModel[]
+  gitStatus?: GitStatusViewModel;
+  todos?: TodoViewModel[];
 }
 
 export interface DecisionConfig {

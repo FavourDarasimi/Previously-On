@@ -153,6 +153,48 @@ describe('Integration: activate -> load -> decision -> compose -> render', () =>
     panel.dispose();
   });
 
+  it('degrades gracefully when vscode.git is unavailable', async () => {
+    const now = new Date();
+    const snapshot = {
+      schemaVersion: SCHEMA_VERSION,
+      sessionEndedAt: new Date(now.getTime() - 60 * 60 * 1000).toISOString(),
+      touchedFiles: [{ path: 'src/a.ts', lastEventAt: new Date(now.getTime() - 30 * 60 * 1000).toISOString(), eventType: 'saved' as const }],
+      todosFound: [],
+    };
+    await store.save(snapshot);
+
+    sandbox.stub(vscode.extensions, 'getExtension').withArgs('vscode.git').returns(undefined);
+
+    const loaded = await store.load();
+    const gitStatus = await import('../../src/providers/gitStatusProvider').then((mod) => new mod.GitStatusProvider().getStatus());
+    const viewModel = composeSummary(loaded!, gitStatus, [], { now });
+
+    assert.ok(viewModel);
+    assert.strictEqual(viewModel!.gitStatus, undefined);
+    assert.strictEqual(viewModel!.hasContent, true);
+
+    const mockPanel = {
+      webview: {
+        html: '',
+        cspSource: 'vscode-resource:',
+        onDidReceiveMessage: sandbox.stub().returns({ dispose: () => {} }),
+        postMessage: sandbox.stub(),
+        asWebviewUri: (uri: vscode.Uri) => uri,
+      },
+      onDidDispose: sandbox.stub().returns({ dispose: () => {} }),
+      reveal: sandbox.stub(),
+      dispose: sandbox.stub(),
+      title: '',
+      viewType: 'previouslyOn.recap',
+    } as unknown as vscode.WebviewPanel;
+
+    const createStub = sandbox.stub(vscode.window, 'createWebviewPanel').returns(mockPanel);
+    SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel!, store);
+
+    assert.ok(createStub.calledOnce);
+    assert.ok(!(mockPanel.webview as unknown as { html: string }).html.includes('Uncommitted changes'));
+  });
+
   it('full flow: suppresses recap on first run (no snapshot)', async () => {
     const loaded = await store.load();
     assert.strictEqual(loaded, undefined);

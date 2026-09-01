@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { SessionStore } from '../session/sessionStore';
 import { SessionTracker } from '../session/sessionTracker';
+import { GitStatusProvider } from '../providers/gitStatusProvider';
+import { TodoScanner } from '../providers/todoScanner';
 import { SummaryWebviewPanel } from '../webview/summaryWebviewPanel';
 import { composeSummary } from '../summary/summaryComposer';
 
@@ -24,8 +26,11 @@ export function registerCommands(
       return;
     }
 
-    // For on-demand, ignore idle threshold but still respect hasContent suppression
-    const viewModel = composeSummary(snapshot, { now: new Date() });
+    const todoTags = config.get<string>('todoTags', 'TODO|FIXME|HACK');
+    const gitStatus = await new GitStatusProvider().getStatus();
+    const todos = await new TodoScanner({ todoTags }).scan(snapshot.touchedFiles.map((file) => file.path));
+
+    const viewModel = composeSummary(snapshot, gitStatus, todos, { now: new Date() });
     if (!viewModel || !viewModel.hasContent) {
       void vscode.window.showInformationMessage('No activity to recap from last session.');
       return;

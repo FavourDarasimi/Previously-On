@@ -9,6 +9,13 @@ export const Strings = {
     emptyHint: 'No files touched last session',
     noLongerExists: 'no longer exists',
   },
+  gitStatus: {
+    title: 'Uncommitted changes',
+    noRepository: 'No Git repository',
+  },
+  todos: {
+    title: 'TODOs left',
+  },
   actions: {
     dismiss: 'Dismiss',
     muteForSession: 'Mute for this session',

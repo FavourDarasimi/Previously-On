@@ -1,6 +1,71 @@
 import { SessionSnapshot } from '../session/sessionStore';
-import { SummaryViewModel, DecisionConfig, DecisionResult, FileTouchedViewModel } from './viewModel';
+import { GitStatusResult } from '../providers/gitStatusProvider';
+import { TodoItem } from '../providers/todoScanner';
+import {
+  SummaryViewModel,
+  DecisionConfig,
+  DecisionResult,
+  FileTouchedViewModel,
+  GitStatusChangeViewModel,
+  GitStatusViewModel,
+  TodoViewModel,
+} from './viewModel';
 import { Strings } from '../strings';
+
+export interface ComposeOptions {
+  now?: Date;
+  maxFilesShown?: number;
+}
+
+function isGitStatusResult(value: unknown): value is GitStatusResult {
+  return !!value && typeof value === 'object' && 'hasRepository' in value && 'changes' in value;
+}
+
+function gitStatusLabel(status: GitStatusChangeViewModel['status']): string {
+  switch (status) {
+    case 'added':
+      return 'A';
+    case 'modified':
+      return 'M';
+    case 'deleted':
+      return 'D';
+    case 'renamed':
+      return 'R';
+    case 'untracked':
+      return '??';
+    default:
+      return '?';
+  }
+}
+
+function toGitStatusViewModel(gitStatus?: GitStatusResult): GitStatusViewModel | undefined {
+  if (!gitStatus || !gitStatus.hasRepository || gitStatus.changes.length === 0) {
+    return undefined;
+  }
+
+  return {
+    hasRepository: true,
+    count: gitStatus.changes.length,
+    changes: gitStatus.changes.map((change) => ({
+      path: change.path,
+      status: change.status,
+      label: gitStatusLabel(change.status),
+    })),
+  };
+}
+
+function toTodoViewModel(todos?: TodoItem[]): TodoViewModel[] | undefined {
+  if (!todos || todos.length === 0) {
+    return undefined;
+  }
+
+  return [...todos].sort((a, b) => {
+    if (a.path !== b.path) {
+      return a.path.localeCompare(b.path);
+    }
+    return a.line - b.line;
+  });
+}
 
 // Pure helpers — no VSCode API
 
@@ -45,11 +110,6 @@ export function formatSubtitle(sessionEndedAt: string, now: Date): string {
   return Strings.lastSessionLabel(relative);
 }
 
-export interface ComposeOptions {
-  now?: Date;
-  maxFilesShown?: number;
-}
-
 /**
  * Pure function: snapshot + options -> ViewModel
  * No side effects, no VSCode API calls.
@@ -57,22 +117,26 @@ export interface ComposeOptions {
  */
 export function composeSummary(
   snapshot: SessionSnapshot | undefined,
+  optionsOrGitStatus?: ComposeOptions | GitStatusResult,
+  todos?: TodoItem[],
   options?: ComposeOptions
 ): SummaryViewModel | undefined {
   if (!snapshot) {
     return undefined;
   }
-  const now = options?.now ?? new Date();
-  // M1: only files touched section
-  // Determine maxFilesShown with long-gap aggressive capping
+
+  const resolvedOptions = isGitStatusResult(optionsOrGitStatus)
+    ? options ?? {}
+    : (optionsOrGitStatus ?? options ?? {});
+  const resolvedGitStatus = isGitStatusResult(optionsOrGitStatus) ? optionsOrGitStatus : undefined;
+  const now = resolvedOptions.now ?? new Date();
   const diffMs = now.getTime() - new Date(snapshot.sessionEndedAt).getTime();
   const thirtyDaysMs = 30 * 24 * 60 * 60 * 1000;
   const isLongGap = diffMs >= thirtyDaysMs;
   const defaultMax = isLongGap ? 5 : 10;
-  const maxFilesShown = options?.maxFilesShown ?? defaultMax;
+  const maxFilesShown = resolvedOptions.maxFilesShown ?? defaultMax;
 
   const touchedFiles = snapshot.touchedFiles ?? [];
-  // Sort most recent first
   const sorted = [...touchedFiles].sort((a, b) => {
     return new Date(b.lastEventAt).getTime() - new Date(a.lastEventAt).getTime();
   });
@@ -89,10 +153,12 @@ export function composeSummary(
   }));
 
   const subtitle = formatSubtitle(snapshot.sessionEndedAt, now);
-
-  const hasContent = filesTouched.length > 0;
-  // Per FINAL_FLOW §4: No activity to report -> suppressed (hasContent false)
-  // Composer still returns model but caller should suppress if !hasContent
+  const gitStatus = toGitStatusViewModel(resolvedGitStatus);
+  const todoItems = toTodoViewModel(todos);
+  const hasContent =
+    filesTouched.length > 0 ||
+    (gitStatus !== undefined && gitStatus.count > 0) ||
+    (todoItems !== undefined && todoItems.length > 0);
 
   return {
     title: Strings.panelTitle,
@@ -102,6 +168,8 @@ export function composeSummary(
     truncated,
     hasContent,
     sessionEndedAt: snapshot.sessionEndedAt,
+    gitStatus,
+    todos: todoItems,
   };
 }
 
@@ -118,9 +186,10 @@ export function composeSummary(
 export function shouldShowRecap(
   snapshot: SessionSnapshot | undefined,
   config: DecisionConfig,
-  now: Date
+  now: Date,
+  gitStatus?: GitStatusResult,
+  todos?: TodoItem[]
 ): DecisionResult {
-  // First run: no snapshot
   if (!snapshot) {
     return { shouldShow: false, reason: 'first_run' };
   }
@@ -139,10 +208,11 @@ export function shouldShowRecap(
     return { shouldShow: false, reason: 'below_threshold' };
   }
 
-  // Check for empty content suppression (FINAL_FLOW §4 No activity to report)
-  const hasFiles = snapshot.touchedFiles && snapshot.touchedFiles.length > 0;
-  // M1 only has files; future will also check Git/TODO
-  if (!hasFiles) {
+  const hasFiles = (snapshot.touchedFiles?.length ?? 0) > 0;
+  const hasGitStatus = !!gitStatus && gitStatus.hasRepository && gitStatus.changes.length > 0;
+  const hasTodos = !!todos && todos.length > 0;
+
+  if (!hasFiles && !hasGitStatus && !hasTodos) {
     return { shouldShow: false, reason: 'no_content' };
   }
 
