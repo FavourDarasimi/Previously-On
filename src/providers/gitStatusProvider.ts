@@ -26,15 +26,84 @@ export class GitStatusProvider {
         ? gitExtension.exports.getAPI(1)
         : undefined;
 
-      if (!api || !Array.isArray(api.repositories)) {
+      if (!api) {
+        return { hasRepository: false, changes: [] };
+      }
+
+      // Support both api.repositories array and api.getRepository per folder (for delayed discovery)
+      let repositories: unknown[] = [];
+      if (Array.isArray(api.repositories)) {
+        repositories = api.repositories;
+      }
+
+      // Fallback: if repositories empty but getRepository exists, try to resolve per workspace folder
+      if (repositories.length === 0 && typeof (api as unknown as { getRepository?: (uri: vscode.Uri) => unknown }).getRepository === 'function') {
+        try {
+          const folders = vscode.workspace.workspaceFolders ?? [];
+          for (const folder of folders) {
+            try {
+              const repo = (api as unknown as { getRepository: (uri: vscode.Uri) => unknown }).getRepository(folder.uri);
+              if (repo) {
+                repositories.push(repo);
+              }
+            } catch {
+              // ignore per-folder lookup errors
+            }
+          }
+        } catch {
+          // ignore fallback errors
+        }
+      }
+
+      // Startup race: git may not have discovered repos yet at onStartupFinished – brief poll (max ~750ms)
+      if (repositories.length === 0) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          await new Promise<void>((resolve) => setTimeout(resolve, 250));
+          if (Array.isArray(api.repositories) && api.repositories.length > 0) {
+            repositories = api.repositories;
+            break;
+          }
+          if (typeof (api as unknown as { getRepository?: (uri: vscode.Uri) => unknown }).getRepository === 'function') {
+            try {
+              const folders = vscode.workspace.workspaceFolders ?? [];
+              const found: unknown[] = [];
+              for (const folder of folders) {
+                try {
+                  const repo = (api as unknown as { getRepository: (uri: vscode.Uri) => unknown }).getRepository(folder.uri);
+                  if (repo) {
+                    found.push(repo);
+                  }
+                } catch {
+                  // ignore
+                }
+              }
+              if (found.length > 0) {
+                repositories = found;
+                break;
+              }
+            } catch {
+              // ignore
+            }
+          }
+        }
+      }
+
+      if (!Array.isArray(repositories)) {
         return { hasRepository: false, changes: [] };
       }
 
       const changes: GitFileChange[] = [];
       const seen = new Set<string>();
 
-      for (const repository of api.repositories) {
-        const state = repository?.state;
+      for (const repository of repositories) {
+        const state = (repository as { state?: unknown })?.state as
+          | {
+              workingTreeChanges?: unknown[];
+              indexChanges?: unknown[];
+              mergeChanges?: unknown[];
+              untrackedChanges?: unknown[];
+            }
+          | undefined;
         if (!state) {
           continue;
         }
@@ -43,6 +112,7 @@ export class GitStatusProvider {
           ...(state.workingTreeChanges ?? []),
           ...(state.indexChanges ?? []),
           ...((state as unknown as { mergeChanges?: unknown[] }).mergeChanges ?? []),
+          ...((state as unknown as { untrackedChanges?: unknown[] }).untrackedChanges ?? []),
         ];
         for (const change of fileChanges) {
           const path = this.getChangePath(change);
@@ -60,8 +130,12 @@ export class GitStatusProvider {
         }
       }
 
+      const hasRepository = Array.isArray(api.repositories)
+        ? api.repositories.length > 0
+        : repositories.length > 0;
+
       return {
-        hasRepository: api.repositories.length > 0,
+        hasRepository,
         changes,
       };
     } catch {
@@ -75,24 +149,49 @@ export class GitStatusProvider {
     }
 
     const c = change as {
-      uri?: vscode.Uri;
-      resourceUri?: vscode.Uri;
+      uri?: vscode.Uri | string;
+      resourceUri?: vscode.Uri | string;
       originalUri?: vscode.Uri;
       path?: string;
       fsPath?: string;
     };
 
     const candidate = c.resourceUri ?? c.uri;
-    if (candidate && typeof candidate === 'object' && 'fsPath' in candidate) {
-      return (candidate as vscode.Uri).fsPath;
+    if (candidate) {
+      if (typeof candidate === 'string') {
+        return candidate;
+      }
+      if (typeof candidate === 'object' && 'fsPath' in candidate) {
+        const fsPath = (candidate as vscode.Uri).fsPath;
+        if (typeof fsPath === 'string' && fsPath.length > 0) {
+          return fsPath;
+        }
+      }
+      // Some ResourceState shapes expose `path` on Uri-like object
+      if (typeof candidate === 'object' && 'path' in candidate) {
+        const maybePath = (candidate as { path?: unknown }).path;
+        if (typeof maybePath === 'string' && maybePath.length > 0) {
+          // Uri.path is not fsPath; prefer fsPath but fallback to path
+          // We still try to return fsPath if available above; this is fallback
+        }
+      }
     }
 
-    if (c.path) {
+    if (typeof c.path === 'string' && c.path.length > 0) {
       return c.path;
     }
 
-    if (c.fsPath) {
+    if (typeof c.fsPath === 'string' && c.fsPath.length > 0) {
       return c.fsPath;
+    }
+
+    // Fallback: some older Resource shapes expose `resourceUri` as string path
+    const asAny = c as unknown as { resource?: string; uriString?: string };
+    if (typeof asAny.resource === 'string' && asAny.resource.length > 0) {
+      return asAny.resource;
+    }
+    if (typeof asAny.uriString === 'string' && asAny.uriString.length > 0) {
+      return asAny.uriString;
     }
 
     return undefined;
@@ -103,8 +202,14 @@ export class GitStatusProvider {
       return undefined;
     }
 
-    const raw = change as { status?: number | string; statusString?: string };
-    const status: unknown = raw.status ?? raw.statusString;
+    const raw = change as {
+      status?: number | string;
+      statusString?: string;
+      type?: number | string;
+      letter?: string;
+    };
+    // ApiChange.status vs Resource.type vs legacy letter
+    const status: unknown = raw.status ?? raw.type ?? raw.statusString ?? raw.letter;
 
     if (typeof status === 'string') {
       const s = status.toUpperCase();

@@ -596,15 +596,27 @@ export class SummaryWebviewPanel {
       groups.set(f.name, { files: [], git: undefined, todos: [] });
     }
 
-    // Helper to find folder for a path
+    // Helper to find folder for a path – falls back to first folder to avoid dropping items in multi-root
     const findFolderName = (p: string): string | undefined => {
       if (path.isAbsolute(p)) {
         for (const f of folders) {
-          const base = f.uri.fsPath;
+          const rawBase = f.uri.fsPath;
+          const base = rawBase.endsWith(path.sep) ? rawBase.slice(0, -1) : rawBase;
           if (p === base || p.startsWith(base + path.sep)) {
             return f.name;
           }
         }
+        // Fallback: absolute path outside known roots – assign to first folder rather than dropping
+        // Also try case-insensitive / normalized check for Windows
+        for (const f of folders) {
+          const baseLower = f.uri.fsPath.toLowerCase();
+          const pLower = p.toLowerCase();
+          const baseNorm = baseLower.endsWith(path.sep) ? baseLower.slice(0, -1) : baseLower;
+          if (pLower === baseNorm || pLower.startsWith(baseNorm + path.sep)) {
+            return f.name;
+          }
+        }
+        return folders[0]?.name;
       } else {
         // Relative path: try resolving against each folder and test existence
         for (const f of folders) {
@@ -617,8 +629,9 @@ export class SummaryWebviewPanel {
             // ignore
           }
         }
+        // Fallback: assign relative paths to first folder when existence check fails (file deleted/untracked)
+        return folders[0]?.name;
       }
-      return undefined;
     };
 
     // Distribute files

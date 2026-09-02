@@ -97,6 +97,50 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     console.log(`[Previously On] recap suppressed: ${decision.reason}`);
   }
 
+  // Background refresh for git discovery race: git may not be ready at onStartupFinished.
+  // If initial git was empty, re-query shortly and update or create the panel.
+  if (snapshot && enabled && !mutedForSession) {
+    const initialHasGit = !!gitStatus?.hasRepository && (gitStatus?.changes.length ?? 0) > 0;
+    if (!initialHasGit) {
+      const bgTimer = setTimeout(async () => {
+        try {
+          if (!store || !snapshot) return;
+          if (store.getMutedForSession()) return;
+          const freshGit = await new GitStatusProvider().getStatus();
+          const hasFreshGit = !!freshGit?.hasRepository && (freshGit?.changes.length ?? 0) > 0;
+          if (!hasFreshGit) return;
+          const freshTodos = await new TodoScanner({ todoTags }).scan(snapshot.touchedFiles.map((file) => file.path));
+          const freshNow = new Date();
+          const gapMs = freshNow.getTime() - new Date(snapshot.sessionEndedAt).getTime();
+          if (gapMs < minIdleMinutes * 60 * 1000) return;
+          const freshDecision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession: false }, freshNow, freshGit, freshTodos);
+          if (!freshDecision.shouldShow) return;
+          const freshVm = composeSummary(snapshot, freshGit, freshTodos, { now: freshNow });
+          if (!freshVm?.hasContent) return;
+          if (SummaryWebviewPanel.currentPanel) {
+            const existing = (SummaryWebviewPanel.currentPanel as unknown as { _viewModel?: { gitStatus?: { count: number } } })._viewModel;
+            const existingCount = existing?.gitStatus?.count ?? 0;
+            if (freshGit.changes.length !== existingCount) {
+              SummaryWebviewPanel.currentPanel.update(freshVm);
+            }
+          } else {
+            // Was previously suppressed due to no_content – now has git, so show
+            try {
+              SummaryWebviewPanel.createOrShow(context.extensionUri, freshVm, store);
+            } catch (err) {
+              console.warn(`[Previously On] background create panel failed: ${err}`);
+            }
+          }
+        } catch (err) {
+          console.warn(`[Previously On] background git refresh failed: ${err}`);
+        }
+      }, 1200);
+      if (typeof (bgTimer as unknown as { unref?: () => void }).unref === 'function') {
+        (bgTimer as unknown as { unref: () => void }).unref();
+      }
+    }
+  }
+
   // Start tracking the new session regardless of whether recap was shown
   // Push tracker disposables to context.subscriptions
   try {
