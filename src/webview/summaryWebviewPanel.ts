@@ -212,176 +212,330 @@ export class SummaryWebviewPanel {
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' ${this._panel.webview.cspSource}; script-src 'nonce-${nonce}';">
   <title>${escapeHtml(viewModel.title)}</title>
   <style>
+    /* Hallmark · pre-emit critique: P5 H4 E5 S4 R5 V5 */
+    /* Hallmark · genre: modern-minimal · macrostructure: Narrative Workflow · theme: Cobalt · enrichment: none · nav: N1a · footer: Ft2 */
     :root {
       color-scheme: light dark;
+      /* Locked tokens — every color / font below references these */
+      --color-paper: var(--vscode-editor-background, oklch(98.5% 0.006 240));
+      --color-paper-2: var(--vscode-sideBar-background, oklch(96.2% 0.012 240));
+      --color-paper-3: var(--vscode-editor-inactiveSelectionBackground, oklch(94% 0.015 240));
+      --color-ink: var(--vscode-editor-foreground, oklch(22% 0.02 264));
+      --color-ink-2: var(--vscode-descriptionForeground, oklch(48% 0.02 264));
+      --color-ink-3: var(--vscode-disabledForeground, oklch(62% 0.015 240));
+      --color-rule: var(--vscode-panel-border, oklch(88% 0.015 240));
+      --color-rule-strong: var(--vscode-panel-border, oklch(82% 0.02 240));
+      --color-accent: oklch(58% 0.22 264);
+      --color-accent-ink: oklch(100% 0 0);
+      --color-accent-soft: oklch(96% 0.03 264);
+      --color-focus: var(--vscode-focusBorder, oklch(58% 0.22 264));
+      --color-badge-bg: var(--vscode-badge-background, oklch(92% 0.04 264));
+      --color-badge-fg: var(--vscode-badge-foreground, oklch(22% 0.02 264));
+      --font-display: var(--vscode-font-family, "Space Grotesk", system-ui, -apple-system, sans-serif);
+      --font-body: var(--vscode-font-family, Inter, system-ui, -apple-system, sans-serif);
+      --font-mono: var(--vscode-editor-font-family, "JetBrains Mono", ui-monospace, monospace);
+      --space-3xs: 0.25rem;
+      --space-2xs: 0.5rem;
+      --space-xs: 0.75rem;
+      --space-sm: 1rem;
+      --space-md: 1.5rem;
+      --space-lg: 2rem;
+      --space-xl: 3rem;
+      --space-2xl: 4.5rem;
+      --text-xs: 0.75rem;
+      --text-sm: 0.875rem;
+      --text-md: 1rem;
+      --text-lg: 1.125rem;
+      --text-xl: 1.5rem;
+      --text-display: clamp(1.35rem, 3.5vw, 1.85rem);
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+      --dur-short: 180ms;
+      --dur-mid: 260ms;
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-pill: 999px;
     }
 
+    html, body {
+      overflow-x: clip;
+      min-width: 0;
+    }
     * {
       box-sizing: border-box;
     }
-
     body {
-      font-family: var(--vscode-font-family, sans-serif);
+      font-family: var(--font-body);
       font-size: var(--vscode-font-size, 13px);
-      color: var(--vscode-editor-foreground);
-      background: var(--vscode-editor-background);
-      padding: 12px 16px 18px;
+      color: var(--color-ink);
+      background: var(--color-paper);
+      padding: 0;
       margin: 0;
-      line-height: 1.5;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
     }
-
     .panel {
-      max-width: 540px;
-    }
-
-    .header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-      padding-bottom: 10px;
-   }
-
-    .title-block {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
+      max-width: 560px;
+      margin: 0 auto;
+      padding: 16px 16px 20px;
       min-width: 0;
     }
 
-    .header h1 {
-      font-size: 1.2em;
-      font-weight: 600;
-      line-height: 1.25;
-      letter-spacing: -0.01em;
-      margin: 0;
+    /* ── Hero ── */
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--space-2xs);
+      padding: 14px 0 18px;
+      border-bottom: 2px solid var(--color-rule-strong);
+      margin-bottom: var(--space-sm);
+    }
+    .hero__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: var(--space-sm);
+    }
+    .hero__kicker {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+      line-height: 1;
+    }
+    .hero__title {
+      font-family: var(--font-display);
+      font-size: var(--text-display);
+      font-weight: 700;
+      font-style: normal;
+      letter-spacing: -0.025em;
+      line-height: 1.05;
+      color: var(--color-ink);
+      margin: 2px 0 0;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .hero__subtitle {
+      display: inline-flex;
+      max-width: 100%;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px;
+      padding: 5px 10px;
+      background: var(--color-accent-soft);
+      border: 1px solid color-mix(in oklch, var(--color-accent) 18%, transparent);
+      border-radius: var(--radius-pill);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.3;
+      color: var(--color-ink-2);
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .hero__dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      flex-shrink: 0;
     }
 
-    .subtitle {
+    /* ── Workflow ── */
+    .workflow {
+      display: grid;
+      gap: 0;
+    }
+    .stage {
+      position: relative;
+      display: grid;
+      gap: var(--space-xs);
+      padding: 14px 0 16px 22px;
+      margin-left: 7px;
+      border-left: 2px solid var(--color-rule);
+      min-width: 0;
+    }
+    .stage:first-of-type {
+      border-left-color: var(--color-accent);
+    }
+    .stage:last-of-type {
+      border-left-color: transparent;
+      /* keep alignment but fade */
+      border-left-color: var(--color-rule);
+      padding-bottom: 4px;
+    }
+    .stage__rail {
+      position: absolute;
+      left: -9px;
+      top: 16px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: var(--color-paper);
+      border: 2px solid var(--color-rule-strong);
       display: inline-flex;
       align-items: center;
-      width: fit-content;
-      max-width: 100%;
-      padding: 4px 10px;
-      border-radius: 999px;
-      border: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
-      background: var(--vscode-editor-inactiveSelectionBackground, transparent);
-      color: var(--vscode-descriptionForeground);
-      font-size: 0.85em;
-      line-height: 1.3;
+      justify-content: center;
+      font-family: var(--font-mono);
+      font-size: 7px;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: var(--color-ink-3);
+      line-height: 1;
     }
-
-    .section {
-      padding-top: 12px;
-      margin-top: 12px;
-      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+    .stage--active .stage__rail {
+      background: var(--color-accent);
+      border-color: var(--color-accent);
+      color: var(--color-accent-ink);
     }
-
-    .section:first-of-type {
-      border-top: none;
-      margin-top: 0;
-      padding-top: 0;
-    }
-
-    .section-header {
+    .stage__head {
       display: flex;
       align-items: baseline;
-      justify-content: space-between;
-      gap: 8px;
-      margin-bottom: 6px;
+      gap: var(--space-xs);
+      min-width: 0;
+      flex-wrap: wrap;
     }
-
-    .section-label {
-      font-size: 0.78em;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      color: var(--vscode-descriptionForeground);
+    .stage__kicker {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.085em;
+      text-transform: uppercase;
+      color: var(--color-accent);
+      white-space: nowrap;
     }
-
-    .section-count {
-      color: var(--vscode-descriptionForeground);
-      font-size: 0.82em;
+    .stage__title {
+      font-family: var(--font-display);
+      font-size: 13px;
+      font-weight: 650;
+      font-style: normal;
+      letter-spacing: -0.01em;
+      color: var(--color-ink);
+      line-height: 1.2;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .stage__count {
+      margin-left: auto;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--color-ink-2);
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      padding: 2px 7px;
+      border-radius: var(--radius-pill);
+      white-space: nowrap;
+    }
+    .stage__meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-ink-3);
+      margin-top: -2px;
+      overflow-wrap: anywhere;
+      min-width: 0;
     }
 
     .file-list {
       list-style: none;
       margin: 0;
       padding: 0;
+      display: grid;
+      gap: 4px;
+      min-width: 0;
     }
-
     .file-item, .todo-item, .git-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 6px 6px;
-      border-radius: 4px;
+      padding: 7px 8px;
+      border-radius: var(--radius-md);
       cursor: pointer;
       outline: none;
+      border: 1px solid transparent;
+      background: transparent;
+      min-width: 0;
+      transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out), transform 120ms var(--ease-out);
     }
-
     .file-item:hover, .todo-item:hover, .git-item:hover {
-      background: var(--vscode-list-hoverBackground);
+      background: var(--color-paper-2);
+      border-color: var(--color-rule);
     }
-
     .file-item:focus-visible, .todo-item:focus-visible, .git-item:focus-visible,
-    .btn:focus-visible, .close-button:focus-visible {
-      outline: 2px solid var(--vscode-focusBorder);
+    .btn:focus-visible, .close-button:focus-visible, .btn-ghost:focus-visible {
+      outline: 2px solid var(--color-focus);
       outline-offset: 2px;
     }
-
     .file-item:active, .todo-item:active, .git-item:active {
-      background: var(--vscode-list-activeSelectionBackground);
+      transform: translateY(1px);
+      background: var(--color-paper-3);
     }
-
     .file-path, .todo-path, .git-path {
       flex: 1;
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.35;
     }
-
     .file-path {
-      color: var(--vscode-textLink-foreground);
+      color: var(--color-ink);
+      font-weight: 500;
     }
-
     .file-path.missing {
-      color: var(--vscode-descriptionForeground);
+      color: var(--color-ink-3);
+      text-decoration: line-through;
+      text-decoration-thickness: 1px;
     }
-
     .file-hint,
     .file-time,
     .todo-meta,
     .list-meta {
-      color: var(--vscode-descriptionForeground);
-     font-size: 0.82em;
+      font-family: var(--font-mono);
+      color: var(--color-ink-3);
+      font-size: 11px;
       white-space: nowrap;
+      flex-shrink: 0;
     }
-
+    .file-time {
+      background: var(--color-paper-2);
+      border: 1px solid var(--color-rule);
+      padding: 1px 6px;
+      border-radius: var(--radius-pill);
+      font-size: 10px;
+    }
     .git-status {
-      display: inline-block;
-      min-width: 2.25em;
-      padding: 2px 6px;
-      border-radius: 3px;
-      background: var(--vscode-badge-background, var(--vscode-editor-inactiveSelectionBackground));
-      color: var(--vscode-badge-foreground, var(--vscode-editor-foreground));
-      font-size: 0.78em;
-      font-weight: 600;
-      text-align: center;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 28px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: var(--radius-pill);
+      background: var(--color-badge-bg);
+      color: var(--color-badge-fg);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+      flex-shrink: 0;
+      border: 1px solid color-mix(in oklch, var(--color-rule) 80%, transparent);
     }
-
     .git-path,
     .todo-path {
-      color: var(--vscode-editor-foreground);
+      color: var(--color-ink);
     }
-
     .todo-item {
       flex-direction: column;
       align-items: stretch;
       gap: 4px;
+      padding: 8px 8px;
     }
-
     .todo-row {
       display: flex;
       align-items: center;
@@ -389,73 +543,161 @@ export class SummaryWebviewPanel {
       gap: 12px;
       min-width: 0;
     }
-
     .todo-path {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      color: var(--vscode-textLink-foreground);
+      color: var(--color-ink);
+      font-weight: 600;
     }
-
     .todo-text {
-      color: var(--vscode-descriptionForeground);
-      line-height: 1.4;
+      font-family: var(--font-body);
+      color: var(--color-ink-2);
+      font-size: 12.5px;
+      line-height: 1.45;
+      overflow-wrap: anywhere;
+      min-width: 0;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
-
     .more-hint {
       padding-top: 6px;
-      color: var(--vscode-descriptionForeground);
-      font-size: 0.82em;
+      font-family: var(--font-mono);
+      color: var(--color-ink-3);
+      font-size: 11px;
     }
-
     .actions {
       display: flex;
       justify-content: flex-start;
-      gap: 10px;
-      margin-top: 14px;
+      gap: 8px;
+      margin-top: 6px;
       padding-top: 14px;
-      border-top: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+      border-top: 1px solid var(--color-rule);
+      flex-wrap: wrap;
     }
-
-    .btn,
-    .close-button {
-      font: inherit;
+    .btn, .btn-ghost, .close-button {
+      font-family: var(--font-body);
+      font-weight: 600;
+      white-space: nowrap;
     }
-
     .btn {
       appearance: none;
-      border: 1px solid var(--vscode-button-border, transparent);
-      border-radius: 2px;
-      background: var(--vscode-button-secondaryBackground, var(--vscode-list-hoverBackground));
-      color: var(--vscode-button-secondaryForeground, var(--vscode-editor-foreground));
-      padding: 6px 12px;
+      border: 1px solid var(--color-accent);
+      border-radius: var(--radius-pill);
+      background: var(--color-accent);
+      color: var(--color-accent-ink);
+      padding: 7px 14px;
+      font-size: 12.5px;
+      line-height: 1;
       cursor: pointer;
-      transition: background 0.1s ease;
+      transition: transform 120ms var(--ease-out), background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+      min-height: 32px;
     }
-
-    .btn:hover,
-    .close-button:hover {
-      background: var(--vscode-list-hoverBackground);
+    .btn:hover {
+      transform: translateY(-1px);
+      background: color-mix(in oklch, var(--color-accent) 92%, black);
     }
-
+    .btn:active {
+      transform: translateY(0px);
+    }
+    .btn-ghost {
+      appearance: none;
+      border: 1px solid var(--color-rule-strong);
+      border-radius: var(--radius-pill);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      padding: 7px 14px;
+      font-size: 12.5px;
+      line-height: 1;
+      cursor: pointer;
+      min-height: 32px;
+      transition: background var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out);
+    }
+    .btn-ghost:hover {
+      background: var(--color-paper-2);
+      border-color: var(--color-ink-3);
+    }
     .close-button {
-      width: 24px;
-      height: 24px;
+      width: 28px;
+      height: 28px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--vscode-foreground);
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-pill);
+      background: var(--color-paper);
+      color: var(--color-ink-2);
       cursor: pointer;
-      padding: 0;
+      flex-shrink: 0;
+      transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
     }
-
+    .close-button:hover {
+      background: var(--color-paper-2);
+      color: var(--color-ink);
+    }
     .section-actions {
       margin-top: 8px;
     }
+    .btn-scm {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      letter-spacing: 0.02em;
+    }
+    /* Grouped multi-root */
+    .group-block {
+      border: 1px solid var(--color-rule);
+      border-radius: var(--radius-md);
+      padding: 10px 10px 8px;
+      background: color-mix(in oklch, var(--color-paper) 96%, var(--color-paper-2));
+      margin-bottom: 10px;
+    }
+    .group-block__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px dashed var(--color-rule);
+    }
+    .group-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-accent);
+      flex-shrink: 0;
+    }
+    .group-name {
+      font-family: var(--font-display);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      color: var(--color-ink);
+    }
+    .group-empty {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-ink-3);
+    }
 
+    @media (max-width: 768px) {
+      .panel { padding-inline: clamp(12px, 4vw, 16px); }
+      .hero__title { font-size: clamp(1.25rem, 5vw, 1.7rem); }
+      .stage { padding-left: 18px; }
+    }
+    @media (max-width: 414px) {
+      .stage__head { gap: 6px; }
+      .file-item, .git-item { padding: 8px 8px; }
+      .actions { gap: 6px; }
+      .btn, .btn-ghost { flex: 1 1 auto; justify-content: center; }
+    }
+    @media (max-width: 375px) {
+      .hero__subtitle { font-size: 10.5px; }
+    }
+    @media (max-width: 320px) {
+      .panel { padding-inline: 12px; }
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -468,17 +710,20 @@ export class SummaryWebviewPanel {
 </head>
 <body>
   <div class="panel">
-    <div class="header">
-      <div class="title-block">
-        <h1>${escapeHtml(viewModel.title)}</h1>
-        <div class="subtitle">${escapeHtml(viewModel.subtitle)}</div>
+    <div class="hero">
+      <div class="hero__top">
+        <span class="hero__kicker">Previously on · Session recap</span>
+        <button type="button" class="close-button" aria-label="Close recap" title="Close" onclick="dismiss()">×</button>
       </div>
-      <button type="button" class="close-button" aria-label="Close recap" title="Close" onclick="dismiss()">×</button>
+      <h1 class="hero__title">${escapeHtml(viewModel.title)}</h1>
+      <div class="hero__subtitle"><span class="hero__dot" aria-hidden="true"></span>${escapeHtml(viewModel.subtitle)}</div>
     </div>
  
-    ${filesHtml}
-    ${gitHtml}
-    ${todoHtml}
+    <div class="workflow">
+      ${filesHtml}
+      ${gitHtml}
+      ${todoHtml}
+    </div>
  
     ${footerHtml}
   </div>
@@ -572,16 +817,18 @@ export class SummaryWebviewPanel {
       ? `<div class="more-hint">+${viewModel.totalFiles - viewModel.filesTouched.length} more</div>`
       : '';
 
-    return `<div class="section" id="files-touched">
-      <div class="section-header">
-        <span class="section-label">${escapeHtml(Strings.filesTouched.title)}</span>
-        <span class="section-count">${countLabel}</span>
+    return `<section class="stage stage--active" id="files-touched" aria-label="Files touched">
+      <span class="stage__rail" aria-hidden="true">01</span>
+      <div class="stage__head">
+        <span class="stage__kicker">01 · Files</span>
+        <h2 class="stage__title">${escapeHtml(Strings.filesTouched.title)}</h2>
+        <span class="stage__count">${countLabel}</span>
       </div>
       <ul class="file-list">
         ${items}
       </ul>
       ${moreHint}
-    </div>`;
+    </section>`;
   }
 
   /**
@@ -677,8 +924,7 @@ export class SummaryWebviewPanel {
       const hasGit = g.git && g.git.count > 0;
       const hasTodos = g.todos && g.todos.length > 0;
       if (!hasFiles && !hasGit && !hasTodos) {
-        // collapsed by default -> render a small header collapsed
-        html += `<div class="section"><div class="section-header"><span>${escapeHtml(name)}</span><span class="count">(empty)</span></div></div>`;
+        html += `<div class="group-block" aria-label="folder-${escapeHtml(name)}"><div class="group-block__head"><span class="group-dot" aria-hidden="true"></span><span class="group-name">${escapeHtml(name)}</span><span class="group-empty">(empty)</span></div></div>`;
         continue;
       }
 
@@ -695,8 +941,8 @@ export class SummaryWebviewPanel {
         todos: g.todos,
       } as SummaryViewModel;
 
-      html += `<div class="section" aria-label="folder-${escapeHtml(name)}">
-        <div class="section-header"><span>${escapeHtml(name)}</span><span class="count"></span></div>
+      html += `<div class="group-block" aria-label="folder-${escapeHtml(name)}">
+        <div class="group-block__head"><span class="group-dot" aria-hidden="true"></span><span class="group-name">${escapeHtml(name)}</span></div>
         ${this.renderFilesTouched(miniVm)}
         ${this.renderGitStatus(miniVm)}
         ${this.renderTodos(miniVm)}
@@ -721,18 +967,20 @@ export class SummaryWebviewPanel {
       )
       .join('');
 
-    return `<div class="section" id="uncommitted-changes">
-      <div class="section-header">
-        <span class="section-label">${escapeHtml(Strings.gitStatus.title)}</span>
-        <span class="section-count">${viewModel.gitStatus.count}</span>
+    return `<section class="stage" id="uncommitted-changes" aria-label="Uncommitted changes">
+      <span class="stage__rail" aria-hidden="true">02</span>
+      <div class="stage__head">
+        <span class="stage__kicker">02 · Changes</span>
+        <h2 class="stage__title">${escapeHtml(Strings.gitStatus.title)}</h2>
+        <span class="stage__count">${viewModel.gitStatus.count}</span>
       </div>
       <ul class="file-list">
         ${items}
       </ul>
       <div class="section-actions">
-        <button class="btn btn-secondary" id="btn-open-scm" type="button">${escapeHtml(Strings.actions.openSourceControl)}</button>
+        <button class="btn-ghost btn-scm" id="btn-open-scm" type="button">${escapeHtml(Strings.actions.openSourceControl)}</button>
       </div>
-    </div>`;
+    </section>`;
   }
 
   private renderTodos(viewModel: SummaryViewModel): string {
@@ -753,15 +1001,17 @@ export class SummaryWebviewPanel {
       )
       .join('');
 
-    return `<div class="section" id="todos-left">
-      <div class="section-header">
-        <span class="section-label">${escapeHtml(Strings.todos.title)}</span>
-        <span class="section-count">${viewModel.todos.length}</span>
+    return `<section class="stage" id="todos-left" aria-label="TODOs left">
+      <span class="stage__rail" aria-hidden="true">03</span>
+      <div class="stage__head">
+        <span class="stage__kicker">03 · Todos</span>
+        <h2 class="stage__title">${escapeHtml(Strings.todos.title)}</h2>
+        <span class="stage__count">${viewModel.todos.length}</span>
       </div>
       <ul class="file-list">
         ${items}
       </ul>
-    </div>`;
+    </section>`;
   }
 
   private pathExists(filePath: string): boolean {
@@ -786,8 +1036,8 @@ export class SummaryWebviewPanel {
 
   private renderFooter(): string {
     return `<div class="actions">
-      <button class="btn btn-secondary" id="btn-dismiss" type="button">${escapeHtml(Strings.actions.dismiss)}</button>
-      <button class="btn btn-secondary" id="btn-mute" type="button">${escapeHtml(Strings.actions.muteForSession)}</button>
+      <button class="btn-ghost" id="btn-dismiss" type="button">${escapeHtml(Strings.actions.dismiss)}</button>
+      <button class="btn" id="btn-mute" type="button">${escapeHtml(Strings.actions.muteForSession)}</button>
     </div>`;
   }
 }
