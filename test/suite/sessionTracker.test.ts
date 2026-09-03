@@ -1,7 +1,7 @@
 import * as assert from 'assert';
 import * as sinon from 'sinon';
 import { SessionTracker } from '../../src/session/sessionTracker';
-import { SessionStore, SessionSnapshot } from '../../src/session/sessionStore';
+import { SessionStore, SessionSnapshot, SCHEMA_VERSION } from '../../src/session/sessionStore';
 
 // Minimal mock store that captures saves
 class MockStore {
@@ -112,7 +112,7 @@ describe('SessionTracker', () => {
     await tracker.flush();
     assert.strictEqual(mockStore.saved.length, 1);
     const snap = mockStore.saved[0];
-    assert.strictEqual(snap.schemaVersion, 1);
+    assert.strictEqual(snap.schemaVersion, SCHEMA_VERSION);
     assert.ok(snap.sessionEndedAt);
     assert.strictEqual(snap.touchedFiles.length, 2);
     assert.strictEqual(snap.touchedFiles[0].path, 'src/b.ts'); // most recent first
@@ -122,7 +122,7 @@ describe('SessionTracker', () => {
     tracker.recordFile('src/a.ts', 'saved');
     tracker.flushSync();
     assert.strictEqual(mockStore.savedSync.length, 1);
-    assert.strictEqual(mockStore.savedSync[0].schemaVersion, 1);
+    assert.strictEqual(mockStore.savedSync[0].schemaVersion, SCHEMA_VERSION);
     assert.ok(mockStore.savedSync[0].sessionEndedAt);
   });
 

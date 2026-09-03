@@ -80,6 +80,28 @@ export class SummaryPopover {
     const hasFiles = viewModel.filesTouched.length > 0;
     const hasGit = !!viewModel.gitStatus && viewModel.gitStatus.count > 0;
 
+    // 0) What were you doing? — deterministic activity summary at top
+    if (viewModel.activity) {
+      if (canUseSeparators) {
+        items.push({
+          label: Strings.activity.title,
+          kind: (vscode as unknown as { QuickPickItemKind: { Separator: number } }).QuickPickItemKind.Separator,
+        } as vscode.QuickPickItem);
+      }
+      const act = viewModel.activity;
+      // Main intent as label, details as description, flow as detail — all plain text, no decorative accent
+      items.push({
+        label: act.intent,
+        description: act.details ?? '',
+        detail: act.flow.length > 0 ? act.flow.join(' → ') : undefined,
+      } as vscode.QuickPickItem & { _path?: string; _line?: number });
+      if (act.focusFile) {
+        const last = items[items.length - 1] as unknown as { _path: string; _line?: number };
+        last._path = act.focusFile.path;
+        if (act.focusFile.line !== undefined) last._line = act.focusFile.line + 1;
+      }
+    }
+
     // 1) Files touched — changed files from last session
     if (hasFiles) {
       if (canUseSeparators) {

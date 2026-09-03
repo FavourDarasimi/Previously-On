@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 export const SNAPSHOT_FILE_NAME = 'session.json';
 export const WORKSPACE_STATE_KEY_META = 'previouslyOn.snapshotMeta';
 export const WORKSPACE_STATE_KEY_MUTED = 'previouslyOn.mutedForSession';
@@ -15,12 +15,52 @@ export interface TouchedFileEntry {
   eventType: TouchedFileEventType;
 }
 
+export interface CursorPosition {
+  path: string;
+  line: number;
+  character: number;
+  at: string;
+}
+
+export interface SymbolEdit {
+  path: string;
+  symbol: string;
+  kind?: string;
+  at: string;
+}
+
+export interface TerminalCommand {
+  command: string;
+  at: string;
+}
+
+export interface TestRun {
+  command: string;
+  at: string;
+  kind: 'task' | 'terminal';
+}
+
+export interface LastActiveFile {
+  path: string;
+  line: number;
+  character: number;
+  at: string;
+}
+
 export interface SessionSnapshot {
   schemaVersion: number;
   workspaceId?: string;
   sessionEndedAt: string; // ISO string
   touchedFiles: TouchedFileEntry[];
   todosFound?: unknown[];
+  // v2 — "What was I doing?" signals
+  cursorPositions?: CursorPosition[];
+  symbolEdits?: SymbolEdit[];
+  visitCounts?: Record<string, number>;
+  terminalCommands?: TerminalCommand[];
+  testRuns?: TestRun[];
+  gitBranch?: string;
+  lastActiveFile?: LastActiveFile;
 }
 
 export interface StoreMeta {
@@ -69,6 +109,24 @@ export class SessionStore {
         // Basic validation
         if (!Array.isArray(parsed.touchedFiles)) {
           parsed.touchedFiles = [];
+        }
+        // Migration v1 -> v2: ensure new optional fields exist
+        if (parsed.schemaVersion === 1) {
+          parsed.schemaVersion = SCHEMA_VERSION;
+          parsed.cursorPositions = parsed.cursorPositions ?? [];
+          parsed.symbolEdits = parsed.symbolEdits ?? [];
+          parsed.visitCounts = parsed.visitCounts ?? {};
+          parsed.terminalCommands = parsed.terminalCommands ?? [];
+          parsed.testRuns = parsed.testRuns ?? [];
+          // gitBranch and lastActiveFile remain undefined if not present
+        }
+        // Ensure v2 fields have sane defaults even if file is v2 but missing some fields
+        if (parsed.schemaVersion >= 2) {
+          if (!Array.isArray(parsed.cursorPositions)) parsed.cursorPositions = [];
+          if (!Array.isArray(parsed.symbolEdits)) parsed.symbolEdits = [];
+          if (typeof parsed.visitCounts !== 'object' || parsed.visitCounts === null) parsed.visitCounts = {};
+          if (!Array.isArray(parsed.terminalCommands)) parsed.terminalCommands = [];
+          if (!Array.isArray(parsed.testRuns)) parsed.testRuns = [];
         }
         return parsed;
       } catch (err) {
@@ -122,6 +180,13 @@ export class SessionStore {
       sessionEndedAt: snapshot.sessionEndedAt,
       touchedFiles: snapshot.touchedFiles ?? [],
       todosFound: snapshot.todosFound ?? [],
+      cursorPositions: snapshot.cursorPositions ?? [],
+      symbolEdits: snapshot.symbolEdits ?? [],
+      visitCounts: snapshot.visitCounts ?? {},
+      terminalCommands: snapshot.terminalCommands ?? [],
+      testRuns: snapshot.testRuns ?? [],
+      gitBranch: snapshot.gitBranch,
+      lastActiveFile: snapshot.lastActiveFile,
     };
 
     // Persist meta to workspaceState
@@ -160,6 +225,13 @@ export class SessionStore {
       sessionEndedAt: snapshot.sessionEndedAt,
       touchedFiles: snapshot.touchedFiles ?? [],
       todosFound: snapshot.todosFound ?? [],
+      cursorPositions: snapshot.cursorPositions ?? [],
+      symbolEdits: snapshot.symbolEdits ?? [],
+      visitCounts: snapshot.visitCounts ?? {},
+      terminalCommands: snapshot.terminalCommands ?? [],
+      testRuns: snapshot.testRuns ?? [],
+      gitBranch: snapshot.gitBranch,
+      lastActiveFile: snapshot.lastActiveFile,
     };
 
     // Sync workspaceState update is not possible (async only), so we best-effort update via globalState sync?

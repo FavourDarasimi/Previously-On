@@ -11,6 +11,7 @@ import {
   TodoViewModel,
 } from './viewModel';
 import { Strings } from '../strings';
+import { inferActivity } from '../activity/activityDetector';
 
 export interface ComposeOptions {
   now?: Date;
@@ -160,6 +161,24 @@ export function composeSummary(
     (gitStatus !== undefined && gitStatus.count > 0) ||
     (todoItems !== undefined && todoItems.length > 0);
 
+  // "What was I doing?" — deterministic lightweight inference, pure
+  const activityRaw = inferActivity(snapshot, {
+    gitBranch: (snapshot as unknown as { gitBranch?: string }).gitBranch,
+    todos: todoItems as unknown as TodoItem[],
+    gitStatus: resolvedGitStatus,
+  });
+  const activity = activityRaw
+    ? {
+        intent: activityRaw.intent,
+        details: activityRaw.details,
+        flow: activityRaw.flow,
+        primaryArea: activityRaw.primaryArea,
+        primaryAreaDisplay: activityRaw.primaryAreaDisplay,
+        focusFile: activityRaw.focusFile,
+        reason: activityRaw.reason,
+      }
+    : undefined;
+
   return {
     title: Strings.panelTitle,
     subtitle,
@@ -170,6 +189,7 @@ export function composeSummary(
     sessionEndedAt: snapshot.sessionEndedAt,
     gitStatus,
     todos: todoItems,
+    activity,
   };
 }
 

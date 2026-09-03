@@ -100,7 +100,7 @@ describe('SessionStore', () => {
     await store.save(snapshot);
     const loaded = await store.load();
     assert.ok(loaded);
-    assert.strictEqual(loaded!.schemaVersion, 1);
+    assert.strictEqual(loaded!.schemaVersion, SCHEMA_VERSION);
     assert.strictEqual(loaded!.workspaceId, 'ws-123');
     assert.strictEqual(loaded!.sessionEndedAt, snapshot.sessionEndedAt);
     assert.strictEqual(loaded!.touchedFiles.length, 2);
@@ -153,7 +153,7 @@ describe('SessionStore', () => {
     await store.save(snapshot);
     const loaded = await store.load();
     assert.ok(loaded);
-    assert.strictEqual(loaded!.schemaVersion, 1);
+    assert.strictEqual(loaded!.schemaVersion, SCHEMA_VERSION);
   });
 
   it('muted flag persists via workspaceState', async () => {
@@ -193,7 +193,7 @@ describe('SessionStore', () => {
     assert.ok(fs.existsSync(filePath), 'session.json should exist');
     const raw = fs.readFileSync(filePath, 'utf8');
     const parsed = JSON.parse(raw);
-    assert.strictEqual(parsed.schemaVersion, 1);
+    assert.strictEqual(parsed.schemaVersion, SCHEMA_VERSION);
     assert.strictEqual(parsed.touchedFiles[0].path, 'src/auth/login.ts');
   });
 

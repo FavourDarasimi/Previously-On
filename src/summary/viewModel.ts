@@ -22,6 +22,16 @@ export interface GitStatusViewModel {
 
 export interface TodoViewModel extends TodoItem {}
 
+export interface ActivityViewModel {
+  intent: string;
+  details?: string;
+  flow: string[];
+  primaryArea?: string;
+  primaryAreaDisplay?: string;
+  focusFile?: { path: string; line?: number };
+  reason: string;
+}
+
 export interface SummaryViewModel {
   title: string;
   subtitle: string;
@@ -32,6 +42,7 @@ export interface SummaryViewModel {
   sessionEndedAt: string;
   gitStatus?: GitStatusViewModel;
   todos?: TodoViewModel[];
+  activity?: ActivityViewModel;
 }
 
 export interface DecisionConfig {

@@ -16,6 +16,10 @@ export const Strings = {
   todos: {
     title: 'TODOs left',
   },
+  activity: {
+    title: 'What you were doing',
+    openFile: 'Jump to last file',
+  },
   actions: {
     dismiss: 'Dismiss',
     muteForSession: 'Mute for this session',

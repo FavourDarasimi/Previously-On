@@ -200,6 +200,7 @@ export class SummaryWebviewPanel {
     if (folders.length > 1 && viewModel.todos && viewModel.todos.length > 0) {
       groupedTodoHtml = this.renderGroupedTodos(viewModel, folders);
     }
+    const activityHtml = this.renderActivity(viewModel);
     const footerHtml = this.renderFooter();
 
     const nonce = getNonce();
@@ -527,6 +528,56 @@ export class SummaryWebviewPanel {
       .panel { padding-left: 10px; padding-right: 10px; }
       .time { display: none; }
     }
+    .activity {
+      margin-bottom: 16px;
+      padding: 10px 8px;
+      background: var(--vscode-sideBarSectionHeader-background, var(--vscode-panel-background, transparent));
+      border: 1px solid var(--vscode-panel-border, transparent);
+      border-radius: 4px;
+      min-width: 0;
+    }
+    .activity-intent {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      margin: 0 0 4px;
+      line-height: 1.3;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .activity-details {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+      margin: 0;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
+    .activity-flow {
+      font-family: var(--vscode-editor-font-family);
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .activity-flow span {
+      color: var(--vscode-textLink-foreground);
+    }
+    .activity-action {
+      margin-top: 6px;
+    }
+    .activity-action a {
+      font-size: 12px;
+      color: var(--vscode-textLink-foreground);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .activity-action a:hover {
+      text-decoration: underline;
+    }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -545,6 +596,7 @@ export class SummaryWebviewPanel {
       <button type="button" class="close" aria-label="Close recap" title="Close" onclick="dismiss()">×</button>
     </div>
 
+    ${activityHtml}
     ${filesHtml}
     ${todoHtml}
     ${groupedTodoHtml}
@@ -596,6 +648,15 @@ export class SummaryWebviewPanel {
       });
       const scmLink = document.getElementById('open-scm');
       if (scmLink) scmLink.addEventListener('click', (e) => { e.preventDefault(); openSCM(); });
+      document.querySelectorAll('.activity-link[data-path]').forEach(el => {
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          const p = el.getAttribute('data-path');
+          const line = el.getAttribute('data-line');
+          if (p && line) openTodo(p, line);
+          else if (p) openFile(p);
+        });
+      });
       const dismissBtn = document.getElementById('btn-dismiss');
       if (dismissBtn) dismissBtn.addEventListener('click', dismiss);
       const muteBtn = document.getElementById('btn-mute');
@@ -604,6 +665,22 @@ export class SummaryWebviewPanel {
   </script>
 </body>
 </html>`;
+  }
+
+  private renderActivity(viewModel: SummaryViewModel): string {
+    const act = viewModel.activity;
+    if (!act) return '';
+    const flow = act.flow && act.flow.length > 0 ? `<div class="activity-flow" title="${escapeHtml(act.flow.join(' → '))}">${act.flow.map((p) => `<span>${escapeHtml(p)}</span>`).join(' → ')}</div>` : '';
+    const focus = act.focusFile
+      ? `<div class="activity-action"><a href="#" class="activity-link" data-path="${escapeHtml(act.focusFile.path)}"${act.focusFile.line !== undefined ? ` data-line="${act.focusFile.line + 1}"` : ''}>${escapeHtml(Strings.activity.openFile)}: ${escapeHtml(act.focusFile.path)}${act.focusFile.line !== undefined ? `:${act.focusFile.line + 1}` : ''}</a></div>`
+      : '';
+    return `<section class="activity" aria-label="${escapeHtml(Strings.activity.title)}">
+      <div class="section-header"><h2 class="section-title">${escapeHtml(Strings.activity.title)}</h2></div>
+      <div class="activity-intent">${escapeHtml(act.intent)}</div>
+      ${act.details ? `<p class="activity-details">${escapeHtml(act.details)}</p>` : ''}
+      ${flow}
+      ${focus}
+    </section>`;
   }
 
   private renderUnifiedFiles(viewModel: SummaryViewModel): string {
