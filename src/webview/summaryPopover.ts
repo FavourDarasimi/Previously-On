@@ -57,10 +57,9 @@ export class SummaryPopover {
 
     quickPick.buttons = scmButton ? [scmButton, dismissButton, muteButton] : [dismissButton, muteButton];
 
-    // Build items — unified file list (Files touched + git status inline) to avoid duplicate sections
+    // Build items — three explicit sections: Files touched, Uncommitted changes, TODOs
     const items: vscode.QuickPickItem[] = [];
 
-    // Helper to map git status to semantic icon + decoration
     const gitIconFor = (status: string): string => {
       switch (status) {
         case 'modified':
@@ -78,87 +77,27 @@ export class SummaryPopover {
       }
     };
 
-    // Build unified rows like the webview does — dedup touched + git-only
-    const gitMap = new Map<string, { status: string; label: string }>();
-    if (viewModel.gitStatus) {
-      for (const c of viewModel.gitStatus.changes) {
-        gitMap.set(c.path, { status: c.status, label: c.label });
-      }
-    }
-    const findGitForPath = (touchedPath: string): { status: string; label: string } | undefined => {
-      if (gitMap.has(touchedPath)) return gitMap.get(touchedPath);
-      const folders = vscode.workspace.workspaceFolders ?? [];
-      if (!path.isAbsolute(touchedPath) && folders.length > 0) {
-        for (const folder of folders) {
-          const abs = path.join(folder.uri.fsPath, touchedPath);
-          if (gitMap.has(abs)) return gitMap.get(abs);
-        }
-      }
-      for (const [gitPath, v] of gitMap.entries()) {
-        if (gitPath.endsWith('/' + touchedPath) || gitPath.endsWith('\\' + touchedPath)) return v;
-      }
-      return undefined;
-    };
-
-    // Files section — single header, then unified rows
     const hasFiles = viewModel.filesTouched.length > 0;
     const hasGit = !!viewModel.gitStatus && viewModel.gitStatus.count > 0;
-    if (hasFiles || hasGit) {
+
+    // 1) Files touched — changed files from last session
+    if (hasFiles) {
       if (canUseSeparators) {
         items.push({
-          label: viewModel.filesTouched.length > 0 ? Strings.filesTouched.title : 'Files',
+          label: Strings.filesTouched.title,
           kind: (vscode as unknown as { QuickPickItemKind: { Separator: number } }).QuickPickItemKind.Separator,
         } as vscode.QuickPickItem);
       }
-      // Add unified rows
-      const touchedSet = new Set(viewModel.filesTouched.map((f) => f.path));
-      const unified: Array<{ path: string; time?: string; git?: { status: string; label: string } }> = [];
       for (const f of viewModel.filesTouched) {
-        unified.push({ path: f.path, time: f.relativeTime, git: findGitForPath(f.path) });
-      }
-      if (viewModel.gitStatus) {
-        for (const c of viewModel.gitStatus.changes) {
-          const already = touchedSet.has(c.path) || unified.some((u) => u.path === c.path);
-          let alreadyRelative = false;
-          if (!already) {
-            for (const u of unified) {
-              if (c.path.endsWith('/' + u.path) || c.path.endsWith('\\' + u.path)) {
-                alreadyRelative = true;
-                break;
-              }
-            }
-          }
-          if (!already && !alreadyRelative) {
-            let displayPath = c.path;
-            const folders = vscode.workspace.workspaceFolders ?? [];
-            for (const folder of folders) {
-              const base = folder.uri.fsPath;
-              if (c.path === base || c.path.startsWith(base + path.sep)) {
-                displayPath = path.relative(base, c.path);
-                break;
-              }
-            }
-            unified.push({ path: displayPath, git: { status: c.status, label: c.label } });
-          }
-        }
-      }
-
-      for (const row of unified) {
-        const git = row.git;
-        const icon = git ? gitIconFor(git.status) : '$(file)';
-        const gitSuffix = git ? ` ${git.label} ${git.status}` : '';
-        // Use description for time + git, detail for hint — keeps one-line scan
+        const missing = f.path.includes('no longer exists') ? '' : '';
+        void missing;
         items.push({
-          label: `${icon} ${row.path}`,
-          description: [row.time, gitSuffix.trim()].filter(Boolean).join('  '),
-          detail: git ? `${git.status}` : undefined,
-          // Store original path for opening
-          // Use QuickPickItem's alwaysShow to keep order
-        } as vscode.QuickPickItem & { _path: string; _git?: boolean });
-        // Attach path via a WeakMap-like property — we store on the item itself
-        (items[items.length - 1] as unknown as { _path: string })._path = row.path;
+          label: `$(file) ${f.path}`,
+          description: f.relativeTime,
+          detail: undefined,
+        } as vscode.QuickPickItem & { _path: string });
+        (items[items.length - 1] as unknown as { _path: string })._path = f.path;
       }
-
       if (viewModel.truncated) {
         items.push({
           label: `+${viewModel.totalFiles - viewModel.filesTouched.length} more files not shown`,
@@ -166,18 +105,43 @@ export class SummaryPopover {
           detail: undefined,
         } as vscode.QuickPickItem);
       }
+    }
 
-      // Inline action: Open Source Control — as an item, not a giant button
-      if (hasGit) {
-        const count = viewModel.gitStatus!.count;
-        const noun = count === 1 ? 'file has changes' : 'files have changes';
+    // 2) Uncommitted files — live git status (always separate so user sees both)
+    if (hasGit) {
+      if (canUseSeparators) {
         items.push({
-          label: `$(source-control) Open Source Control`,
-          description: `${count} ${noun} to review`,
-          detail: undefined,
-        } as vscode.QuickPickItem & { _action: 'openSCM' });
-        (items[items.length - 1] as unknown as { _action: string })._action = 'openSCM';
+          label: Strings.gitStatus.title,
+          kind: (vscode as unknown as { QuickPickItemKind: { Separator: number } }).QuickPickItemKind.Separator,
+        } as vscode.QuickPickItem);
       }
+      for (const c of viewModel.gitStatus!.changes) {
+        // Show relative path for readability
+        let displayPath = c.path;
+        const folders = vscode.workspace.workspaceFolders ?? [];
+        for (const folder of folders) {
+          const base = folder.uri.fsPath;
+          if (c.path === base || c.path.startsWith(base + path.sep)) {
+            displayPath = path.relative(base, c.path);
+            break;
+          }
+        }
+        items.push({
+          label: `${gitIconFor(c.status)} ${displayPath}`,
+          description: `${c.label} ${c.status}`,
+          detail: undefined,
+        } as vscode.QuickPickItem & { _path: string });
+        (items[items.length - 1] as unknown as { _path: string })._path = c.path;
+      }
+      // Inline action to open SCM — keeps primary action one click away
+      const count = viewModel.gitStatus!.count;
+      const noun = count === 1 ? 'file has changes' : 'files have changes';
+      items.push({
+        label: `$(source-control) Open Source Control`,
+        description: `${count} ${noun} to review`,
+        detail: undefined,
+      } as vscode.QuickPickItem & { _action: 'openSCM' });
+      (items[items.length - 1] as unknown as { _action: string })._action = 'openSCM';
     }
 
     // TODOs — separate section because they are code locations, not file status
