@@ -15,6 +15,7 @@ import { SessionTracker } from './session/sessionTracker';
 import { GitStatusProvider } from './providers/gitStatusProvider';
 import { TodoScanner } from './providers/todoScanner';
 import { SummaryWebviewPanel } from './webview/summaryWebviewPanel';
+import { SummaryPopover } from './webview/summaryPopover';
 import { composeSummary, shouldShowRecap } from './summary/summaryComposer';
 import { registerCommands } from './commands';
 import { Strings } from './strings';
@@ -68,14 +69,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Decision tree (pure)
   const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now, gitStatus, todos);
 
-  // If decision is to show, compose view-model and render
+  // If decision is to show, compose view-model and render as popover (not full-screen webview)
   if (decision.shouldShow && snapshot) {
     const viewModel = composeSummary(snapshot, gitStatus, todos, { now });
     if (viewModel && viewModel.hasContent) {
       try {
-        SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel, store);
+        const pop = SummaryPopover.show(viewModel, store);
+        // Fallback to webview if popover could not be shown (e.g., in tests without QuickPick stub)
+        if (!pop) {
+          SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel, store);
+        }
       } catch (err) {
-        console.warn(`[Previously On] failed to show panel: ${err}`);
+        console.warn(`[Previously On] failed to show popover: ${err}`);
+        try {
+          SummaryWebviewPanel.createOrShow(context.extensionUri, viewModel, store);
+        } catch (_e) {
+          // ignore fallback failure
+        }
       }
     } else {
       // No content to show — suppressed per FINAL_FLOW §4
@@ -98,7 +108,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   // Background refresh for git discovery race: git may not be ready at onStartupFinished.
-  // If initial git was empty, re-query shortly and update or create the panel.
+  // If initial git was empty, re-query shortly and show popover if fresh data has content.
   if (snapshot && enabled && !mutedForSession) {
     const initialHasGit = !!gitStatus?.hasRepository && (gitStatus?.changes.length ?? 0) > 0;
     if (!initialHasGit) {
@@ -106,6 +116,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         try {
           if (!store || !snapshot) return;
           if (store.getMutedForSession()) return;
+          // Don't re-show if a popover or panel is already visible
+          if (SummaryPopover.current || SummaryWebviewPanel.currentPanel) return;
           const freshGit = await new GitStatusProvider().getStatus();
           const hasFreshGit = !!freshGit?.hasRepository && (freshGit?.changes.length ?? 0) > 0;
           if (!hasFreshGit) return;
@@ -117,20 +129,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           if (!freshDecision.shouldShow) return;
           const freshVm = composeSummary(snapshot, freshGit, freshTodos, { now: freshNow });
           if (!freshVm?.hasContent) return;
-          if (SummaryWebviewPanel.currentPanel) {
-            const existing = (SummaryWebviewPanel.currentPanel as unknown as { _viewModel?: { gitStatus?: { count: number } } })._viewModel;
-            const existingCount = existing?.gitStatus?.count ?? 0;
-            if (freshGit.changes.length !== existingCount) {
-              SummaryWebviewPanel.currentPanel.update(freshVm);
-            }
-          } else {
-            // Was previously suppressed due to no_content – now has git, so show
-            try {
-              SummaryWebviewPanel.createOrShow(context.extensionUri, freshVm, store);
+          try {
+              const pop = SummaryPopover.show(freshVm, store);
+              if (!pop) SummaryWebviewPanel.createOrShow(context.extensionUri, freshVm, store);
             } catch (err) {
-              console.warn(`[Previously On] background create panel failed: ${err}`);
+              console.warn(`[Previously On] background create popover failed: ${err}`);
+              try {
+                SummaryWebviewPanel.createOrShow(context.extensionUri, freshVm, store);
+              } catch (_e) {
+                // ignore
+              }
             }
-          }
         } catch (err) {
           console.warn(`[Previously On] background git refresh failed: ${err}`);
         }
