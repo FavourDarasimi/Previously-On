@@ -201,7 +201,8 @@ export class SummaryWebviewPanel {
       groupedTodoHtml = this.renderGroupedTodos(viewModel, folders);
     }
     const activityHtml = this.renderActivity(viewModel);
-    const footerHtml = this.renderFooter();
+    const failedTestsHtml = this.renderFailedTests(viewModel);
+    const footerHtml = this.renderFooter(viewModel);
 
     const nonce = getNonce();
 
@@ -222,13 +223,24 @@ export class SummaryWebviewPanel {
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size, 13px);
       color: var(--vscode-foreground, var(--vscode-editor-foreground));
-      background: var(--vscode-editor-background);
+      background: transparent;
       margin: 0;
-      padding: 0;
+      padding: 24px 12px;
       line-height: 1.4;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 100vh;
     }
     .panel {
-      max-width: 560px;
+      width: 100%;
+      max-width: 440px;
+      max-height: 460px;
+      overflow-y: auto;
+      background: var(--vscode-editor-background);
+      border: 1px solid var(--vscode-panel-border);
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.18);
       padding: 12px 12px 16px;
       min-width: 0;
     }
@@ -478,6 +490,14 @@ export class SummaryWebviewPanel {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 1px;
     }
+    .btn-primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      border-color: var(--vscode-button-border, transparent);
+    }
+    .btn-primary:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
     .btn-secondary {
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
@@ -598,6 +618,7 @@ export class SummaryWebviewPanel {
 
     ${activityHtml}
     ${filesHtml}
+    ${failedTestsHtml}
     ${todoHtml}
     ${groupedTodoHtml}
 
@@ -657,6 +678,14 @@ export class SummaryWebviewPanel {
           else if (p) openFile(p);
         });
       });
+      const continueBtn = document.getElementById('btn-continue');
+      if (continueBtn) continueBtn.addEventListener('click', () => {
+        const p = continueBtn.getAttribute('data-path');
+        const line = continueBtn.getAttribute('data-line');
+        if (p && line) openTodo(p, line);
+        else if (p) openFile(p);
+        else dismiss();
+      });
       const dismissBtn = document.getElementById('btn-dismiss');
       if (dismissBtn) dismissBtn.addEventListener('click', dismiss);
       const muteBtn = document.getElementById('btn-mute');
@@ -680,6 +709,26 @@ export class SummaryWebviewPanel {
       ${act.details ? `<p class="activity-details">${escapeHtml(act.details)}</p>` : ''}
       ${flow}
       ${focus}
+    </section>`;
+  }
+
+  private renderFailedTests(viewModel: SummaryViewModel): string {
+    const items = viewModel.failedTests;
+    if (!items || items.length === 0) return '';
+    const rows = items
+      .map((it) => {
+        const loc = it.path ? `${escapeHtml(it.path)}${it.line ? `:${it.line}` : ''}` : '';
+        const icon = it.severity === 'error' ? '$(error)' : it.severity === 'test' ? '$(beaker)' : '$(warning)';
+        return `<li class="row" ${it.path ? `data-path="${escapeHtml(it.path)}" ${it.line ? `data-line="${it.line}"` : ''}` : ''} title="${escapeHtml(it.message)}" tabindex="0" role="button">
+            <span class="path">${icon} ${loc ? escapeHtml(loc) : ''}</span>
+            <span class="todo-snippet" style="color: var(--vscode-errorForeground, var(--vscode-descriptionForeground));">${escapeHtml(it.message)}</span>
+          </li>`;
+      })
+      .join('');
+    return `<section class="section" id="failed-tests">
+      <div class="section-header"><h2 class="section-title">${escapeHtml(Strings.failedTests.title)}</h2><span class="section-count">${items.length}</span></div>
+      <p class="section-desc">Tests or errors left from last run — fix before continuing</p>
+      <ul class="list">${rows}</ul>
     </section>`;
   }
 
@@ -982,8 +1031,14 @@ export class SummaryWebviewPanel {
     return false;
   }
 
-  private renderFooter(): string {
+  private renderFooter(viewModel?: SummaryViewModel): string {
+    const continueBtn = viewModel?.activity?.focusFile
+      ? `<button class="btn btn-primary" id="btn-continue" type="button" data-path="${escapeHtml(viewModel.activity.focusFile.path)}"${viewModel.activity.focusFile.line !== undefined ? ` data-line="${viewModel.activity.focusFile.line + 1}"` : ''}>${escapeHtml(Strings.actions.continue)}</button>`
+      : viewModel?.filesTouched[0]
+        ? `<button class="btn btn-primary" id="btn-continue" type="button" data-path="${escapeHtml(viewModel.filesTouched[0].path)}">${escapeHtml(Strings.actions.continue)}</button>`
+        : '';
     return `<div class="actions">
+      ${continueBtn}
       <button class="btn btn-secondary" id="btn-dismiss" type="button">${escapeHtml(Strings.actions.dismiss)}</button>
       <button class="btn btn-secondary" id="btn-mute" type="button">${escapeHtml(Strings.actions.muteForSession)}</button>
     </div>`;

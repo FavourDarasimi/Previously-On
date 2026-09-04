@@ -32,6 +32,13 @@ export interface ActivityViewModel {
   reason: string;
 }
 
+export interface FailedTestViewModel {
+  path?: string;
+  message: string;
+  severity: 'error' | 'warning' | 'test';
+  line?: number;
+}
+
 export interface SummaryViewModel {
   title: string;
   subtitle: string;
@@ -43,6 +50,7 @@ export interface SummaryViewModel {
   gitStatus?: GitStatusViewModel;
   todos?: TodoViewModel[];
   activity?: ActivityViewModel;
+  failedTests?: FailedTestViewModel[];
 }
 
 export interface DecisionConfig {

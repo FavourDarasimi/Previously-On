@@ -20,12 +20,16 @@ export const Strings = {
     title: 'What you were doing',
     openFile: 'Jump to last file',
   },
+  failedTests: {
+    title: 'Failed tests',
+  },
   actions: {
     dismiss: 'Dismiss',
     muteForSession: 'Mute for this session',
     openFile: 'Open file',
     openSourceControl: 'Open Source Control',
     showRecap: 'Show Last Session Recap',
+    continue: 'Continue where you left off',
   },
   errors: {
     snapshotCorrupt: 'Snapshot file corrupt — treating as first run',

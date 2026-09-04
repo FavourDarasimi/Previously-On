@@ -102,6 +102,21 @@ export class SummaryPopover {
       }
     }
 
+    // 0) Continue — primary action at top, note-like "pick up here"
+    const focusForContinue =
+      viewModel.activity?.focusFile ??
+      (viewModel.filesTouched[0] ? { path: viewModel.filesTouched[0].path, line: undefined } : undefined);
+    if (focusForContinue) {
+      items.push({
+        label: `$(arrow-right) ${Strings.actions.continue}`,
+        description: focusForContinue.path + (focusForContinue.line !== undefined ? `:${focusForContinue.line + 1}` : ''),
+        detail: 'Jump to where you left off',
+      } as vscode.QuickPickItem & { _path: string; _line?: number });
+      const last = items[items.length - 1] as unknown as { _path: string; _line?: number };
+      last._path = focusForContinue.path;
+      if (focusForContinue.line !== undefined) last._line = focusForContinue.line + 1;
+    }
+
     // 1) Files touched — changed files from last session
     if (hasFiles) {
       if (canUseSeparators) {
@@ -164,6 +179,29 @@ export class SummaryPopover {
         detail: undefined,
       } as vscode.QuickPickItem & { _action: 'openSCM' });
       (items[items.length - 1] as unknown as { _action: string })._action = 'openSCM';
+    }
+
+    // Failed tests / errors — from diagnostics + recent test runs (note-like, limited to 3)
+    if (viewModel.failedTests && viewModel.failedTests.length > 0) {
+      if (canUseSeparators) {
+        items.push({
+          label: Strings.failedTests.title,
+          kind: (vscode as unknown as { QuickPickItemKind: { Separator: number } }).QuickPickItemKind.Separator,
+        } as vscode.QuickPickItem);
+      }
+      for (const t of viewModel.failedTests.slice(0, 3)) {
+        const loc = t.path ? `${t.path}${t.line ? `:${t.line}` : ''}` : '';
+        items.push({
+          label: `${t.severity === 'error' ? '$(error)' : t.severity === 'test' ? '$(beaker)' : '$(warning)'} ${loc || t.message.slice(0, 40)}`,
+          description: t.severity,
+          detail: t.message,
+        } as vscode.QuickPickItem & { _path?: string; _line?: number });
+        if (t.path) {
+          const last = items[items.length - 1] as unknown as { _path: string; _line?: number };
+          last._path = t.path;
+          if (t.line) last._line = t.line;
+        }
+      }
     }
 
     // TODOs — separate section because they are code locations, not file status

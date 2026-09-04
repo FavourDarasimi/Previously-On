@@ -9,9 +9,11 @@ import {
   GitStatusChangeViewModel,
   GitStatusViewModel,
   TodoViewModel,
+  FailedTestViewModel,
 } from './viewModel';
 import { Strings } from '../strings';
 import { inferActivity } from '../activity/activityDetector';
+import { FailedTestItem } from '../providers/failedTestsProvider';
 
 export interface ComposeOptions {
   now?: Date;
@@ -20,6 +22,20 @@ export interface ComposeOptions {
 
 function isGitStatusResult(value: unknown): value is GitStatusResult {
   return !!value && typeof value === 'object' && 'hasRepository' in value && 'changes' in value;
+}
+
+function isFailedTestsArray(value: unknown): value is FailedTestItem[] {
+  return Array.isArray(value) && (value.length === 0 || (typeof value[0] === 'object' && value[0] !== null && 'message' in value[0] && 'severity' in value[0]));
+}
+
+function toFailedTestsViewModel(items?: FailedTestItem[]): FailedTestViewModel[] | undefined {
+  if (!items || items.length === 0) return undefined;
+  return items.slice(0, 5).map((it) => ({
+    message: it.message,
+    severity: it.severity,
+    path: it.path,
+    line: it.line,
+  }));
 }
 
 function gitStatusLabel(status: GitStatusChangeViewModel['status']): string {
@@ -120,15 +136,36 @@ export function composeSummary(
   snapshot: SessionSnapshot | undefined,
   optionsOrGitStatus?: ComposeOptions | GitStatusResult,
   todos?: TodoItem[],
+  failedTestsOrOptions?: FailedTestItem[] | ComposeOptions,
   options?: ComposeOptions
 ): SummaryViewModel | undefined {
   if (!snapshot) {
     return undefined;
   }
 
-  const resolvedOptions = isGitStatusResult(optionsOrGitStatus)
-    ? options ?? {}
-    : (optionsOrGitStatus ?? options ?? {});
+  // Backward compat: 4th arg may be options (old call: snapshot, git, todos, {now})
+  // or failedTests array (new call: snapshot, git, todos, failedTests, {now})
+  let resolvedFailedTests: FailedTestItem[] | undefined;
+  let resolvedOptions: ComposeOptions;
+  if (isFailedTestsArray(failedTestsOrOptions)) {
+    resolvedFailedTests = failedTestsOrOptions;
+    resolvedOptions = options ?? {};
+  } else if (failedTestsOrOptions && typeof failedTestsOrOptions === 'object' && ('now' in failedTestsOrOptions || 'maxFilesShown' in failedTestsOrOptions)) {
+    resolvedOptions = failedTestsOrOptions as ComposeOptions;
+  } else if (isGitStatusResult(optionsOrGitStatus)) {
+    resolvedOptions = (failedTestsOrOptions as ComposeOptions) ?? options ?? {};
+  } else {
+    resolvedOptions = (optionsOrGitStatus as ComposeOptions) ?? (failedTestsOrOptions as ComposeOptions) ?? options ?? {};
+  }
+  // Also handle the case where optionsOrGitStatus is gitStatus and failedTestsOrOptions is actually options
+  if (isGitStatusResult(optionsOrGitStatus) && !isFailedTestsArray(failedTestsOrOptions)) {
+    // already handled, but ensure resolvedOptions is correct when 4 args: snapshot, git, todos, {now}
+    if (failedTestsOrOptions && !isFailedTestsArray(failedTestsOrOptions) && typeof failedTestsOrOptions === 'object') {
+      resolvedOptions = failedTestsOrOptions as ComposeOptions;
+    } else {
+      resolvedOptions = options ?? {};
+    }
+  }
   const resolvedGitStatus = isGitStatusResult(optionsOrGitStatus) ? optionsOrGitStatus : undefined;
   const now = resolvedOptions.now ?? new Date();
   const diffMs = now.getTime() - new Date(snapshot.sessionEndedAt).getTime();
@@ -156,10 +193,12 @@ export function composeSummary(
   const subtitle = formatSubtitle(snapshot.sessionEndedAt, now);
   const gitStatus = toGitStatusViewModel(resolvedGitStatus);
   const todoItems = toTodoViewModel(todos);
+  const failedTests = toFailedTestsViewModel(resolvedFailedTests);
   const hasContent =
     filesTouched.length > 0 ||
     (gitStatus !== undefined && gitStatus.count > 0) ||
-    (todoItems !== undefined && todoItems.length > 0);
+    (todoItems !== undefined && todoItems.length > 0) ||
+    (failedTests !== undefined && failedTests.length > 0);
 
   // "What was I doing?" — deterministic lightweight inference, pure
   const activityRaw = inferActivity(snapshot, {
@@ -190,6 +229,7 @@ export function composeSummary(
     gitStatus,
     todos: todoItems,
     activity,
+    failedTests,
   };
 }
 
@@ -208,7 +248,8 @@ export function shouldShowRecap(
   config: DecisionConfig,
   now: Date,
   gitStatus?: GitStatusResult,
-  todos?: TodoItem[]
+  todos?: TodoItem[],
+  failedTests?: FailedTestItem[]
 ): DecisionResult {
   if (!snapshot) {
     return { shouldShow: false, reason: 'first_run' };
@@ -231,8 +272,9 @@ export function shouldShowRecap(
   const hasFiles = (snapshot.touchedFiles?.length ?? 0) > 0;
   const hasGitStatus = !!gitStatus && gitStatus.hasRepository && gitStatus.changes.length > 0;
   const hasTodos = !!todos && todos.length > 0;
-
-  if (!hasFiles && !hasGitStatus && !hasTodos) {
+  const hasFailedTests = !!failedTests && failedTests.length > 0;
+  // Also consider activity derived from snapshot even if no other content — but activity requires files, so not needed
+  if (!hasFiles && !hasGitStatus && !hasTodos && !hasFailedTests) {
     return { shouldShow: false, reason: 'no_content' };
   }
 

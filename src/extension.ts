@@ -14,6 +14,7 @@ export async function clearMuteIfLongGap(context: vscode.ExtensionContext, store
 import { SessionTracker } from './session/sessionTracker';
 import { GitStatusProvider } from './providers/gitStatusProvider';
 import { TodoScanner } from './providers/todoScanner';
+import { FailedTestsProvider } from './providers/failedTestsProvider';
 import { SummaryWebviewPanel } from './webview/summaryWebviewPanel';
 import { SummaryPopover } from './webview/summaryPopover';
 import { composeSummary, shouldShowRecap } from './summary/summaryComposer';
@@ -36,6 +37,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   tracker = new SessionTracker(store);
 
   registerCommands(context, store, tracker);
+
+  // Permanent status-bar item — tiny, always visible, click to open recap
+  const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBar.text = '$(circle-filled) Previously On';
+  statusBar.tooltip = 'Open last session recap';
+  statusBar.command = 'previouslyOn.showRecap';
+  statusBar.show();
+  context.subscriptions.push(statusBar);
 
   // Load snapshot (async but fast — JSON file bounded by touched files)
   let snapshot: Awaited<ReturnType<SessionStore['load']>>;
@@ -63,15 +72,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const now = new Date();
   const gitStatusProvider = new GitStatusProvider();
   const todoScanner = new TodoScanner({ todoTags });
+  const failedTestsProvider = new FailedTestsProvider();
   const gitStatus = snapshot ? await gitStatusProvider.getStatus() : undefined;
   const todos = snapshot ? await todoScanner.scan(snapshot.touchedFiles.map((file) => file.path)) : [];
+  const failedTestsRes = snapshot ? await failedTestsProvider.getFailedTests(snapshot) : { items: [] };
+  const failedTests = failedTestsRes.items;
 
   // Decision tree (pure)
-  const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now, gitStatus, todos);
+  const decision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession }, now, gitStatus, todos, failedTests);
 
   // If decision is to show, compose view-model and render as popover (not full-screen webview)
   if (decision.shouldShow && snapshot) {
-    const viewModel = composeSummary(snapshot, gitStatus, todos, { now });
+    const viewModel = composeSummary(snapshot, gitStatus, todos, failedTests, { now });
     if (viewModel && viewModel.hasContent) {
       try {
         const pop = SummaryPopover.show(viewModel, store);
@@ -92,18 +104,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       console.log('[Previously On] suppressed — no content');
     }
   } else {
-    // Log reason for M1 observability (not user-visible)
-    if (decision.reason === 'first_run') {
-      // Optional subtle status bar hint for first run — non-blocking, dismissible
-      const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-      status.text = `$(info) ${Strings.firstRunStatus}`;
-      status.tooltip = 'Previously On will recap your session next time you reopen this workspace.';
-      status.command = 'previouslyOn.showRecap';
-      status.show();
-      context.subscriptions.push(status);
-      // Auto-hide after 10s
-      setTimeout(() => status.dispose(), 10_000);
-    }
     console.log(`[Previously On] recap suppressed: ${decision.reason}`);
   }
 
@@ -119,15 +119,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           // Don't re-show if a popover or panel is already visible
           if (SummaryPopover.current || SummaryWebviewPanel.currentPanel) return;
           const freshGit = await new GitStatusProvider().getStatus();
+          const freshFailedRes = await new FailedTestsProvider().getFailedTests(snapshot);
+          const freshFailed = freshFailedRes.items;
           const hasFreshGit = !!freshGit?.hasRepository && (freshGit?.changes.length ?? 0) > 0;
-          if (!hasFreshGit) return;
+          const hasFreshFailed = freshFailed.length > 0;
+          if (!hasFreshGit && !hasFreshFailed) return;
           const freshTodos = await new TodoScanner({ todoTags }).scan(snapshot.touchedFiles.map((file) => file.path));
           const freshNow = new Date();
           const gapMs = freshNow.getTime() - new Date(snapshot.sessionEndedAt).getTime();
           if (gapMs < minIdleMinutes * 60 * 1000) return;
-          const freshDecision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession: false }, freshNow, freshGit, freshTodos);
+          const freshDecision = shouldShowRecap(snapshot, { enabled, minIdleMinutes, mutedForSession: false }, freshNow, freshGit, freshTodos, freshFailed);
           if (!freshDecision.shouldShow) return;
-          const freshVm = composeSummary(snapshot, freshGit, freshTodos, { now: freshNow });
+          const freshVm = composeSummary(snapshot, freshGit, freshTodos, freshFailed, { now: freshNow });
           if (!freshVm?.hasContent) return;
           try {
               const pop = SummaryPopover.show(freshVm, store);
@@ -180,13 +183,20 @@ export function deactivate(): void {
     } else if (store) {
       // Fallback if tracker not initialized
       const fallbackSnapshot = {
-        schemaVersion: 1 as const,
+        schemaVersion: 2 as const,
         workspaceId: computeWorkspaceId(),
         sessionEndedAt: new Date().toISOString(),
         touchedFiles: [],
         todosFound: [],
+        cursorPositions: [],
+        symbolEdits: [],
+        visitCounts: {},
+        terminalCommands: [],
+        testRuns: [],
+        gitBranch: undefined,
+        lastActiveFile: undefined,
       };
-      store.saveSync(fallbackSnapshot);
+      store.saveSync(fallbackSnapshot as unknown as import('./session/sessionStore').SessionSnapshot);
     }
   } catch (err) {
     console.warn(`[Previously On] deactivate flush failed: ${err}`);
